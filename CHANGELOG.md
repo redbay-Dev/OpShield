@@ -28,10 +28,9 @@ All notable changes to OpShield are documented here.
 - `BETTER_AUTH_SECRET` in `.env.development` is placeholder — needs a proper 32+ char secret
 - No Stripe integration yet (schema only)
 - DB migration `0001_eager_impossible_man.sql` needs to be applied (`pnpm db:migrate`)
-- Seed script does not yet create dev service API keys — create keys via `POST /api/v1/service-keys` after seeding
 
 ### Next Steps (Priority Order)
-1. **Apply migration + seed dev keys** — Run `pnpm db:migrate` and add service key seeding to `seed.ts`
+1. **Apply migration** — Run `pnpm db:migrate` to create `service_api_keys` table
 2. **Tenant provisioning flow** — Schema creation in product databases. See `docs/02-TENANT-PROVISIONING.md`
 3. **Stripe billing integration** — Connect plans to Stripe products/prices. See `docs/04-BILLING-PRICING-MODEL.md`
 4. **Public website** — Marketing pages, pricing page, sign-up flow
