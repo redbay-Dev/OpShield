@@ -213,4 +213,25 @@ Every architectural, product, and workflow decision is recorded here with ration
 **Rationale:** Single endpoint, dual auth keeps the API surface clean. Product scoping prevents SafeSpec from seeing Nexum's modules and vice versa, following principle of least privilege. Platform admins see all modules since they manage the entire platform.
 **Alternatives considered:** Separate endpoints per auth method (duplicated route logic); always return all modules (violates least privilege for service keys); separate middleware chain per auth type on same route (Fastify preHandler doesn't support OR logic natively).
 
+### DEC-029: One subscription per tenant (not per product)
+**Date:** 2026-03-21
+**Context:** Tenants can subscribe to SafeSpec modules, Nexum modules, or both. Should each product have its own Stripe subscription, or one subscription per tenant?
+**Decision:** One Stripe subscription per tenant with multiple line items (one per module). Bundle discounts are applied as Stripe coupons on the single subscription.
+**Rationale:** One subscription simplifies billing management — single invoice, single payment, single cancellation. Stripe supports multiple items per subscription natively. Bundle discounts are easier to apply as coupons on a single subscription than coordinating across multiple subscriptions. Platform admin can see the full billing picture in one place.
+**Alternatives considered:** Subscription per product (two invoices, harder to apply bundle discounts); subscription per module (fragmented billing, too many subscriptions to manage).
+
+### DEC-030: Webhook route in own Fastify scope for raw body parsing
+**Date:** 2026-03-21
+**Context:** Stripe webhook signature verification requires the raw request body (buffer). Fastify parses JSON by default, which modifies the body before the signature can be verified.
+**Decision:** Register the Stripe webhook route in its own Fastify encapsulated scope with a custom content type parser that preserves the raw buffer. Registered before the `/api/v1` group at the app root level.
+**Rationale:** Fastify's encapsulation model means the raw body parser only affects routes in the webhook scope — all other routes continue using normal JSON parsing. This is the documented pattern for Stripe webhook handling in Fastify.
+**Alternatives considered:** Global raw body plugin (affects all routes, breaks normal JSON parsing); `preParsing` hook to save raw body (requires careful buffering, fragile); separate Express/Hono server for webhooks (unnecessary complexity).
+
+### DEC-031: Standalone price sync script (not admin API)
+**Date:** 2026-03-21
+**Context:** Stripe prices need to be created and linked to plan records in the DB. This could be an API endpoint or a standalone script.
+**Decision:** Standalone CLI script (`pnpm stripe:sync`) that reads plans from DB, creates Stripe products/prices, and updates plan records. Run manually after changing plan configuration.
+**Rationale:** Price sync is a rare admin operation (only when plans change), not a runtime API call. A script is simpler, safer (no accidental triggers), and can be run with full visibility into what's being created. No auth/permission complexity needed.
+**Alternatives considered:** Admin API endpoint (adds auth complexity for a rarely-used operation, risk of accidental invocation); manual Stripe dashboard configuration (error-prone, no DB sync, doesn't scale).
+
 ---

@@ -128,3 +128,45 @@ export const moduleIdParamSchema = z.object({
   tenantId: z.string().uuid(),
   moduleId: z.string().min(1),
 });
+
+/** Create a subscription for a tenant */
+export const createSubscriptionSchema = z.object({
+  billingInterval: z.enum(["monthly", "annual"]),
+  trialPeriodDays: z.number().int().min(1).max(90).optional(),
+});
+
+export type CreateSubscriptionInput = z.infer<typeof createSubscriptionSchema>;
+
+/** Cancel a subscription */
+export const cancelSubscriptionSchema = z.object({
+  atPeriodEnd: z.boolean().default(true),
+});
+
+export type CancelSubscriptionInput = z.infer<typeof cancelSubscriptionSchema>;
+
+/** Subscription item in response */
+export const subscriptionItemResponseSchema = z.object({
+  id: z.string().uuid(),
+  stripeItemId: z.string().nullable(),
+  planId: z.string().uuid(),
+  moduleId: z.string(),
+  productId: z.string(),
+  quantity: z.number().int(),
+});
+
+export type SubscriptionItemResponse = z.infer<typeof subscriptionItemResponseSchema>;
+
+/** Subscription response */
+export const subscriptionResponseSchema = z.object({
+  id: z.string().uuid(),
+  stripeSubscriptionId: z.string(),
+  status: z.string(),
+  currentPeriodStart: z.string().nullable(),
+  currentPeriodEnd: z.string().nullable(),
+  cancelAtPeriodEnd: z.boolean(),
+  stripeCouponId: z.string().nullable(),
+  items: z.array(subscriptionItemResponseSchema),
+  createdAt: z.string(),
+});
+
+export type SubscriptionResponse = z.infer<typeof subscriptionResponseSchema>;

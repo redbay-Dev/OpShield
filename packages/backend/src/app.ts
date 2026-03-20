@@ -14,6 +14,8 @@ import { entitlementRoutes } from "./routes/entitlements.js";
 import { moduleRoutes } from "./routes/modules.js";
 import { meRoutes } from "./routes/me.js";
 import { serviceKeyRoutes } from "./routes/service-keys.js";
+import { stripeWebhookRoute } from "./routes/stripe-webhook.js";
+import { subscriptionRoutes } from "./routes/subscriptions.js";
 
 const TRUSTED_ORIGINS = new Set([
   config.auth.url,
@@ -189,6 +191,9 @@ export function buildApp(): ReturnType<typeof Fastify> {
 
   // ── Routes ──
 
+  // Stripe webhook — own encapsulated scope for raw body parsing (before /api/v1)
+  void app.register(stripeWebhookRoute);
+
   // Health check (unauthenticated)
   void app.register(healthRoutes);
 
@@ -205,6 +210,7 @@ export function buildApp(): ReturnType<typeof Fastify> {
       void api.register(entitlementRoutes);
       void api.register(moduleRoutes);
       void api.register(serviceKeyRoutes);
+      void api.register(subscriptionRoutes);
     },
     { prefix: "/api/v1" },
   );

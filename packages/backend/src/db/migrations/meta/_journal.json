@@ -15,6 +15,13 @@
       "when": 1774038030926,
       "tag": "0001_eager_impossible_man",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1774339200000,
+      "tag": "0002_stripe_billing_integration",
+      "breakpoints": true
     }
   ]
 }

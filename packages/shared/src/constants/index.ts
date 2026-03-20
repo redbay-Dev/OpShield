@@ -59,3 +59,15 @@ export const PLAN_TIERS = {
   PROFESSIONAL: "professional",
   ENTERPRISE: "enterprise",
 } as const;
+
+/** Billing intervals */
+export const BILLING_INTERVALS = {
+  MONTHLY: "monthly",
+  ANNUAL: "annual",
+} as const;
+
+/** Stripe coupon IDs for bundle discounts */
+export const STRIPE_COUPONS = {
+  BUNDLE_10_PERCENT: "bundle_10_percent",
+  BUNDLE_15_PERCENT: "bundle_15_percent",
+} as const;
