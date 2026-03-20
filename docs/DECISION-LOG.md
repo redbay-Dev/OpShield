@@ -150,4 +150,32 @@ Every architectural, product, and workflow decision is recorded here with ration
 **Rationale:** Identical tooling across all three projects reduces cognitive load. The shared package handles internal concerns while platform-types is the external contract consumed by SafeSpec and Nexum.
 **Alternatives considered:** None — consistency with existing projects is the obvious choice.
 
+### DEC-020: No tenantId on user table — multi-tenant via join table
+**Date:** 2026-03-20
+**Context:** SafeSpec has `tenantId` directly on the `user` table, but OpShield users (e.g., contractors, consultants) may belong to multiple tenants.
+**Decision:** Use a `tenant_users` join table with unique constraint on (userId, tenantId) instead of a direct FK on user. JWT payload includes `tenant_memberships` array.
+**Rationale:** Supports multi-tenant membership without denormalization. The join table also stores the user's role per tenant.
+**Alternatives considered:** tenantId on user with a separate membership table — rejected as redundant and confusing about source of truth.
+
+### DEC-021: EdDSA/Ed25519 for JWT signing via Better Auth JWT plugin
+**Date:** 2026-03-20
+**Context:** Cross-domain SSO requires JWT tokens that SafeSpec and Nexum can verify without calling OpShield.
+**Decision:** Use Better Auth's JWT plugin with JWKS endpoint at `/.well-known/jwks.json`. JWT issuer is "opshield", expiration 1 hour.
+**Rationale:** EdDSA/Ed25519 is fast, compact, and the Better Auth default. JWKS endpoint follows standard OAuth 2.0/OIDC conventions.
+**Alternatives considered:** Symmetric HMAC signing — rejected because products would need the shared secret, increasing blast radius of a key compromise.
+
+### DEC-022: Per-route getSession() calls (not global auth hook)
+**Date:** 2026-03-20
+**Context:** Need to decide whether auth is checked globally or per-route.
+**Decision:** Use per-route `getSession()` calls and a `requirePlatformAdmin` preHandler hook, matching SafeSpec's pattern.
+**Rationale:** Some routes (health, JWKS, auth endpoints) must be public. Per-route is explicit, easier to reason about, and consistent with SafeSpec.
+**Alternatives considered:** Global `onRequest` hook with exclusion list — rejected as harder to maintain and error-prone.
+
+### DEC-023: @fastify/helmet for security headers
+**Date:** 2026-03-20
+**Context:** Need standard security headers (CSP, X-Frame-Options, etc.).
+**Decision:** Register `@fastify/helmet` with CSP disabled in development.
+**Rationale:** Industry standard, minimal config, covers OWASP header recommendations.
+**Alternatives considered:** Manual header setting — rejected as error-prone and harder to maintain.
+
 ---

@@ -2,7 +2,42 @@
 
 All notable changes to OpShield are documented here.
 
-## [Unreleased]
+## [Unreleased] — Phase 2: Database Foundation + Auth + Tenant CRUD + Entitlements API
+
+### Added
+- Better Auth integration with email/password, 2FA (TOTP), and JWT/JWKS plugins (DEC-021)
+- Auth database schema: user, session, account, verification, two_factor, jwks tables
+- Tenant-users join table (`tenant_users`) for multi-tenant user membership (DEC-020)
+- Session middleware (`getSession`) for Fastify request authentication (DEC-022)
+- Platform admin guard middleware (`requirePlatformAdmin`)
+- Tenant CRUD routes: POST/GET/GET/:id/PATCH under `/api/v1/tenants` (platform admin only)
+- Entitlements API: GET `/api/v1/tenants/:tenantId/entitlements`
+- JWKS endpoint at `/.well-known/jwks.json` (proxies to `/api/auth/.well-known/jwks.json`)
+- `@fastify/helmet` for security headers (DEC-023)
+- Zod type provider (validatorCompiler/serializerCompiler) on Fastify app
+- Shared schemas: updateTenantSchema, tenantResponseSchema, tenantListQuerySchema, tenantIdParamSchema
+- Database seed script with plans (9 plans across 3 tiers), test tenant "Demo Haulage Pty Ltd", test user, platform admin
+- Unit tests for tenant and entitlements routes (auth guard verification)
+- Database migrations generated and applied (15 tables total)
+
+### Resolved from Phase 1
+- Database migrations now generated and applied
+- Better Auth fully configured with auth routes at `/api/auth/*`
+- Session management operational
+
+### Known Issues
+- `BETTER_AUTH_SECRET` in `.env.development` is placeholder — needs a proper 32+ char secret
+- No Stripe integration yet (schema only)
+- Entitlements API currently requires platform admin auth — needs service API key auth for product backends
+
+### Next Steps (Priority Order)
+1. **Frontend auth pages** — Login, register, 2FA setup/verification flows. See `docs/07-AUTH-ARCHITECTURE.md`
+2. **Tenant provisioning flow** — Full provisioning with schema creation in product databases. See `docs/02-TENANT-PROVISIONING.md`
+3. **Service API key auth** — Allow SafeSpec/Nexum backends to call entitlements API without session cookies
+4. **Stripe billing integration** — Connect plans to Stripe products/prices. See `docs/04-BILLING-PRICING-MODEL.md`
+5. **Public website** — Marketing pages, pricing page, sign-up flow
+
+## [0.1.0] — Phase 1: Scaffold
 
 ### Added
 - Monorepo scaffold with pnpm 10 workspaces + Turborepo 2.8 (DEC-019)
@@ -16,14 +51,7 @@ All notable changes to OpShield are documented here.
 - Docker reference file documenting shared services
 - Initial test suite: 7 tests across all 4 packages (health, constants, entitlements, App render)
 
-### Known Issues
-- Database migrations not yet generated or run (`pnpm db:generate` + `pnpm db:migrate` needed after schema review)
-- Better Auth not yet configured (no auth routes, no session management)
+### Known Issues (at time of release)
+- Database migrations not yet generated (resolved in Phase 2)
+- Better Auth not yet configured (resolved in Phase 2)
 - No Stripe integration yet (schema only)
-
-### Next Steps (Priority Order)
-1. **Better Auth setup** — Configure the SSO auth instance (email/password + TOTP 2FA + JWT/JWKS). This is OpShield's core function. See `docs/07-AUTH-ARCHITECTURE.md`.
-2. **Generate and run database migrations** — Review schema, run `pnpm db:generate`, then `pnpm db:migrate`
-3. **Auth routes** — Register Better Auth handler in Fastify, create `/api/auth/*` routes
-4. **Frontend auth pages** — Login, register, 2FA setup flows
-5. **Tenant provisioning API** — See `docs/02-TENANT-PROVISIONING.md`

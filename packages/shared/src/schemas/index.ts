@@ -32,3 +32,43 @@ export const entitlementsResponseSchema = z.object({
 });
 
 export type EntitlementsResponse = z.infer<typeof entitlementsResponseSchema>;
+
+/** Tenant update schema (all fields optional) */
+export const updateTenantSchema = z.object({
+  name: z.string().min(2).max(255).optional(),
+  billingEmail: z.email().optional(),
+  status: z.enum(["onboarding", "active", "suspended", "cancelled"]).optional(),
+});
+
+export type UpdateTenantInput = z.infer<typeof updateTenantSchema>;
+
+/** Tenant response schema */
+export const tenantResponseSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  slug: z.string(),
+  status: z.string(),
+  billingEmail: z.string().nullable(),
+  stripeCustomerId: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export type TenantResponse = z.infer<typeof tenantResponseSchema>;
+
+/** Query params for listing tenants */
+export const tenantListQuerySchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  status: z.enum(["onboarding", "active", "suspended", "cancelled"]).optional(),
+  search: z.string().optional(),
+});
+
+export type TenantListQuery = z.infer<typeof tenantListQuerySchema>;
+
+/** Path param for tenant ID */
+export const tenantIdParamSchema = z.object({
+  tenantId: z.string().uuid(),
+});
+
+export type TenantIdParam = z.infer<typeof tenantIdParamSchema>;
