@@ -1,0 +1,44 @@
+# OpShield Development Services
+#
+# NOTE: These services are shared with SafeSpec and Nexum.
+# They are already running on the dev server. Do NOT spin up duplicates.
+# This file is for REFERENCE ONLY — it documents the shared services.
+#
+# OpShield uses:
+#   - PostgreSQL: database "opshield_dev" (SafeSpec uses "safespec_dev", Nexum uses "nexum_dev")
+#   - Redis: key prefix "opshield:" (SafeSpec uses "safespec:", Nexum uses "nexum:")
+#   - MinIO: bucket "opshield-dev" (SafeSpec uses "safespec-dev", Nexum uses "nexum-dev")
+#   - MailHog: shared (no separation needed)
+
+services:
+  # Reference: PostgreSQL 15 on port 5432
+  # postgres:
+  #   image: postgres:15
+  #   ports:
+  #     - "5432:5432"
+  #   environment:
+  #     POSTGRES_USER: devuser
+  #     POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+  #     POSTGRES_DB: opshield_dev
+
+  # Reference: Redis 7.4 on port 6379
+  # redis:
+  #   image: redis:7.4
+  #   ports:
+  #     - "6379:6379"
+  #   command: redis-server --requirepass ${REDIS_PASSWORD}
+
+  # Reference: MinIO on port 9000 (S3-compatible)
+  # minio:
+  #   image: minio/minio
+  #   ports:
+  #     - "9000:9000"
+  #     - "9001:9001"
+  #   command: server /data --console-address ":9001"
+
+  # Reference: MailHog on port 1025/8025
+  # mailhog:
+  #   image: mailhog/mailhog
+  #   ports:
+  #     - "1025:1025"
+  #     - "8025:8025"

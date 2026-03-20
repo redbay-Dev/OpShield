@@ -143,4 +143,11 @@ Every architectural, product, and workflow decision is recorded here with ration
 **Rationale:** URL-prefixed versioning is simple, explicit, and cacheable. The 6-month deprecation window gives time to update products. Since Ryan maintains all three codebases, the deprecation period is more about not having to update everything simultaneously than about external API consumers.
 **Alternatives considered:** No versioning (fragile — any change can break products); header-based versioning (harder to debug, less visible); per-endpoint versioning (inconsistent).
 
+### DEC-019: Monorepo scaffold matching Nexum/SafeSpec patterns
+**Date:** 2026-03-20
+**Context:** OpShield needs a runnable project. The team already uses a proven monorepo pattern across Nexum and SafeSpec.
+**Decision:** Scaffold OpShield as a pnpm 10 + Turborepo 2.8 monorepo with four packages: `@opshield/backend` (Fastify 5), `@opshield/frontend` (React 19 + Vite 8), `@opshield/shared` (internal types/schemas/constants), and `@redbay/platform-types` (cross-product contract types). All versions, configs, and conventions match Nexum exactly.
+**Rationale:** Identical tooling across all three projects reduces cognitive load. The shared package handles internal concerns while platform-types is the external contract consumed by SafeSpec and Nexum.
+**Alternatives considered:** None — consistency with existing projects is the obvious choice.
+
 ---
