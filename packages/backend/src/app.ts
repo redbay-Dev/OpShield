@@ -13,6 +13,7 @@ import { tenantRoutes } from "./routes/tenants.js";
 import { entitlementRoutes } from "./routes/entitlements.js";
 import { moduleRoutes } from "./routes/modules.js";
 import { meRoutes } from "./routes/me.js";
+import { serviceKeyRoutes } from "./routes/service-keys.js";
 
 const TRUSTED_ORIGINS = new Set([
   config.auth.url,
@@ -203,6 +204,7 @@ export function buildApp(): ReturnType<typeof Fastify> {
       void api.register(tenantRoutes);
       void api.register(entitlementRoutes);
       void api.register(moduleRoutes);
+      void api.register(serviceKeyRoutes);
     },
     { prefix: "/api/v1" },
   );

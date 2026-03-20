@@ -1,9 +1,12 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { eq, and, isNull } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { tenants, tenantModules } from "../db/schema/tenants.js";
 import { plans } from "../db/schema/billing.js";
-import { requirePlatformAdmin } from "../middleware/require-platform-admin.js";
+import {
+  requireServiceAuth,
+  type ServiceKeyAuth,
+} from "../middleware/require-service-auth.js";
 import { tenantIdParamSchema } from "@opshield/shared/schemas";
 
 export async function entitlementRoutes(app: FastifyInstance): Promise<void> {
@@ -12,7 +15,7 @@ export async function entitlementRoutes(app: FastifyInstance): Promise<void> {
   // Phase 2: authenticated via platform admin or service API key.
   app.get(
     "/tenants/:tenantId/entitlements",
-    { preHandler: [requirePlatformAdmin] },
+    { preHandler: [requireServiceAuth] },
     async (request, reply) => {
       const parsed = tenantIdParamSchema.safeParse(request.params);
       if (!parsed.success) {
@@ -79,8 +82,16 @@ export async function entitlementRoutes(app: FastifyInstance): Promise<void> {
         }
       }
 
+      // When called via service key, scope to the calling product's modules
+      const serviceKey = (
+        request as FastifyRequest & { serviceKey?: ServiceKeyAuth }
+      ).serviceKey;
+      const scopedModules = serviceKey
+        ? modules.filter((m) => m.productId === serviceKey.productId)
+        : modules;
+
       // Enrich modules with plan info
-      const enrichedModules = modules.map((mod) => {
+      const enrichedModules = scopedModules.map((mod) => {
         const modulePlans = planLookup.get(mod.moduleId);
         // Find the plan that matches the module's maxUsers (best match for tier)
         const matchedPlan = modulePlans?.find(

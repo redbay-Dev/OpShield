@@ -88,6 +88,24 @@ export const platformAdmins = pgTable("platform_admins", {
 });
 
 /**
+ * Service API keys for product backends (SafeSpec, Nexum) to call OpShield APIs.
+ * Keys are SHA-256 hashed — raw key is shown only once at creation time.
+ */
+export const serviceApiKeys = pgTable("service_api_keys", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  productId: varchar("product_id", { length: 50 }).notNull(),
+  keyPrefix: varchar("key_prefix", { length: 8 }).notNull(),
+  keyHash: text("key_hash").notNull().unique(),
+  status: varchar("status", { length: 20 }).notNull().default("active"),
+  createdBy: text("created_by").notNull(),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
  * Audit log for platform-level actions.
  * Tracks tenant creation, module changes, billing events, admin actions.
  */

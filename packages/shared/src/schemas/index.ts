@@ -102,6 +102,27 @@ export const updateModuleSchema = z.object({
 
 export type UpdateModuleInput = z.infer<typeof updateModuleSchema>;
 
+/** Service API key creation schema */
+export const createServiceKeySchema = z.object({
+  productId: z.enum(["safespec", "nexum"]),
+});
+
+export type CreateServiceKeyInput = z.infer<typeof createServiceKeySchema>;
+
+/** Service API key response schema (list view — no raw key) */
+export const serviceKeyResponseSchema = z.object({
+  id: z.string().uuid(),
+  productId: z.string(),
+  keyPrefix: z.string(),
+  status: z.string(),
+  createdBy: z.string(),
+  lastUsedAt: z.string().nullable(),
+  revokedAt: z.string().nullable(),
+  createdAt: z.string(),
+});
+
+export type ServiceKeyResponse = z.infer<typeof serviceKeyResponseSchema>;
+
 /** Path params for module routes */
 export const moduleIdParamSchema = z.object({
   tenantId: z.string().uuid(),

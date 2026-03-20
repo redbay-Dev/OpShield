@@ -199,4 +199,18 @@ Every architectural, product, and workflow decision is recorded here with ration
 **Rationale:** Prevents broken states where Nexum Compliance has no SafeSpec data to display. Hard delete is appropriate because module entitlements are a current-state table, not an audit trail (audit log records all changes separately).
 **Alternatives considered:** Soft delete with status "removed" (complicates re-addition logic); cascading removal of Nexum Compliance when last SafeSpec module removed (too aggressive — admin should make that decision explicitly).
 
+### DEC-027: SHA-256 for service API key hashing (not bcrypt)
+**Date:** 2026-03-21
+**Context:** Service API keys need to be stored securely. bcrypt is standard for passwords, but API keys have different characteristics.
+**Decision:** Hash service API keys with SHA-256 and use constant-time comparison via `timingSafeEqual`. Store only the hash and an 8-character prefix for identification in logs/UI.
+**Rationale:** API keys are high-entropy random strings (32 bytes / 64 hex chars), not user-chosen passwords. SHA-256 is sufficient because the key space is too large for brute-force attacks. bcrypt's intentional slowness would add unnecessary latency to every authenticated API call. The key prefix allows admins to identify which key is in use without exposing the full key.
+**Alternatives considered:** bcrypt (unnecessary latency for high-entropy keys); Argon2 (same issue); storing keys in plaintext (insecure — database breach would expose all keys).
+
+### DEC-028: Dual-mode authentication middleware for entitlements API
+**Date:** 2026-03-21
+**Context:** The entitlements API needs to be callable by both platform admins (browser sessions) and product backends (API keys). Two separate endpoints would duplicate logic.
+**Decision:** Created `requireServiceAuth` middleware that accepts either `x-product-api-key` header or a platform admin session cookie. When called via service key, the entitlements response is automatically scoped to the calling product's modules.
+**Rationale:** Single endpoint, dual auth keeps the API surface clean. Product scoping prevents SafeSpec from seeing Nexum's modules and vice versa, following principle of least privilege. Platform admins see all modules since they manage the entire platform.
+**Alternatives considered:** Separate endpoints per auth method (duplicated route logic); always return all modules (violates least privilege for service keys); separate middleware chain per auth type on same route (Fastify preHandler doesn't support OR logic natively).
+
 ---

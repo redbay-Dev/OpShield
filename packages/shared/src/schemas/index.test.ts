@@ -9,6 +9,8 @@ import {
   tenantListQuerySchema,
   moduleEntitlementSchema,
   entitlementsResponseSchema,
+  createServiceKeySchema,
+  serviceKeyResponseSchema,
 } from "./index.js";
 
 describe("createTenantSchema", () => {
@@ -239,6 +241,58 @@ describe("moduleEntitlementSchema", () => {
       currentUsers: -1,
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe("createServiceKeySchema", () => {
+  it("accepts safespec", () => {
+    const result = createServiceKeySchema.safeParse({ productId: "safespec" });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts nexum", () => {
+    const result = createServiceKeySchema.safeParse({ productId: "nexum" });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects invalid product", () => {
+    const result = createServiceKeySchema.safeParse({ productId: "invalid" });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects missing productId", () => {
+    const result = createServiceKeySchema.safeParse({});
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("serviceKeyResponseSchema", () => {
+  it("accepts valid key response", () => {
+    const result = serviceKeyResponseSchema.safeParse({
+      id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      productId: "safespec",
+      keyPrefix: "abcd1234",
+      status: "active",
+      createdBy: "user-123",
+      lastUsedAt: null,
+      revokedAt: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts key with lastUsedAt", () => {
+    const result = serviceKeyResponseSchema.safeParse({
+      id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      productId: "nexum",
+      keyPrefix: "ef567890",
+      status: "revoked",
+      createdBy: "user-456",
+      lastUsedAt: "2026-03-15T10:00:00.000Z",
+      revokedAt: "2026-03-20T12:00:00.000Z",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    expect(result.success).toBe(true);
   });
 });
 
