@@ -11,6 +11,7 @@ import { auth } from "./auth.js";
 import { healthRoutes } from "./routes/health.js";
 import { tenantRoutes } from "./routes/tenants.js";
 import { entitlementRoutes } from "./routes/entitlements.js";
+import { meRoutes } from "./routes/me.js";
 
 const TRUSTED_ORIGINS = new Set([
   config.auth.url,
@@ -197,6 +198,7 @@ export function buildApp(): ReturnType<typeof Fastify> {
         data: { version: "0.0.0", environment: config.nodeEnv },
       }));
 
+      void api.register(meRoutes);
       void api.register(tenantRoutes);
       void api.register(entitlementRoutes);
     },

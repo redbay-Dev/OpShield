@@ -8,6 +8,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@frontend": resolve(__dirname, "./src"),
+      "@shared": resolve(__dirname, "../shared/src"),
     },
   },
   server: {
@@ -15,6 +16,10 @@ export default defineConfig({
     host: "0.0.0.0",
     proxy: {
       "/api": {
+        target: "http://localhost:3000",
+        changeOrigin: true,
+      },
+      "/.well-known": {
         target: "http://localhost:3000",
         changeOrigin: true,
       },

@@ -178,4 +178,18 @@ Every architectural, product, and workflow decision is recorded here with ration
 **Rationale:** Industry standard, minimal config, covers OWASP header recommendations.
 **Alternatives considered:** Manual header setting — rejected as error-prone and harder to maintain.
 
+### DEC-024: Better Auth React client with origin-based baseURL
+**Date:** 2026-03-20
+**Context:** Frontend needs to call Better Auth APIs. Better Auth's `createAuthClient` requires a full URL with protocol, but the Vite proxy handles `/api` routing in dev.
+**Decision:** Use `window.location.origin + "/api/auth"` as the baseURL, falling back to `http://localhost:5170/api/auth` for test environments.
+**Rationale:** Deployment-agnostic — works with any domain. A relative path fails Better Auth's URL validation. Hardcoding the backend URL would break in production.
+**Alternatives considered:** Hardcoded backend URL (breaks in production); environment variable (extra config for something derivable).
+
+### DEC-025: Admin status check via dedicated API endpoint
+**Date:** 2026-03-20
+**Context:** Frontend needs to know if the logged-in user is a platform admin to gate dashboard access.
+**Decision:** Created `GET /api/v1/me/admin-status` returning `{ isPlatformAdmin: boolean }`. Cached 5 minutes client-side.
+**Rationale:** Avoids exposing `platform_admins` table structure. Separates admin check from session check (Better Auth doesn't know about platform admins).
+**Alternatives considered:** Embed admin status in JWT payload (token bloat, requires Better Auth customization); catch 403 on admin endpoints (fragile UX).
+
 ---

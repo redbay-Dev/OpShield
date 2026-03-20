@@ -2,7 +2,32 @@
 
 All notable changes to OpShield are documented here.
 
-## [Unreleased] — Phase 2: Database Foundation + Auth + Tenant CRUD + Entitlements API
+## [Unreleased] — Phase 3: Auth UI + Platform Admin Dashboard
+
+### Added
+- **Auth UI**: Login page, sign-up page, 2FA setup (TOTP QR code + backup codes), 2FA verification with device trust and backup code fallback
+- **Platform Admin Dashboard**: Sidebar layout with responsive mobile sheet nav, dashboard home with tenant stat cards
+- **Tenant Management UI**: Tenant list with search/filter/pagination, tenant detail with inline editing and module entitlements tab, create tenant dialog with auto-slug generation
+- **Auth Infrastructure**: Better Auth React client with twoFactor plugin, ProtectedRoute and AdminRoute guards, session-based navigation
+- **API Layer**: Typed fetch client (`api/client.ts`), React Query hooks for tenants and entitlements
+- **Backend**: `GET /api/v1/me/admin-status` endpoint for frontend admin checks
+- **shadcn/ui**: Initialized base-nova style with 13 components (button, input, label, card, dialog, table, tabs, badge, separator, avatar, dropdown-menu, sheet, sonner)
+- **Vite Config**: `@shared` path alias, `.well-known` proxy for JWKS endpoint
+- Updated frontend tests for new auth-based routing
+
+### Known Issues
+- `BETTER_AUTH_SECRET` in `.env.development` is placeholder — needs a proper 32+ char secret
+- No Stripe integration yet (schema only)
+- Entitlements API currently requires platform admin auth — needs service API key auth for product backends
+
+### Next Steps (Priority Order)
+1. **Module management API** — Endpoints to assign/revoke modules on tenants
+2. **Service API key auth** — Allow SafeSpec/Nexum backends to call entitlements API without session cookies
+3. **Tenant provisioning flow** — Schema creation in product databases. See `docs/02-TENANT-PROVISIONING.md`
+4. **Stripe billing integration** — Connect plans to Stripe products/prices. See `docs/04-BILLING-PRICING-MODEL.md`
+5. **Public website** — Marketing pages, pricing page, sign-up flow
+
+## [0.2.0] — Phase 2: Database Foundation + Auth + Tenant CRUD + Entitlements API
 
 ### Added
 - Better Auth integration with email/password, 2FA (TOTP), and JWT/JWKS plugins (DEC-021)
@@ -19,23 +44,6 @@ All notable changes to OpShield are documented here.
 - Database seed script with plans (9 plans across 3 tiers), test tenant "Demo Haulage Pty Ltd", test user, platform admin
 - Unit tests for tenant and entitlements routes (auth guard verification)
 - Database migrations generated and applied (15 tables total)
-
-### Resolved from Phase 1
-- Database migrations now generated and applied
-- Better Auth fully configured with auth routes at `/api/auth/*`
-- Session management operational
-
-### Known Issues
-- `BETTER_AUTH_SECRET` in `.env.development` is placeholder — needs a proper 32+ char secret
-- No Stripe integration yet (schema only)
-- Entitlements API currently requires platform admin auth — needs service API key auth for product backends
-
-### Next Steps (Priority Order)
-1. **Frontend auth pages** — Login, register, 2FA setup/verification flows. See `docs/07-AUTH-ARCHITECTURE.md`
-2. **Tenant provisioning flow** — Full provisioning with schema creation in product databases. See `docs/02-TENANT-PROVISIONING.md`
-3. **Service API key auth** — Allow SafeSpec/Nexum backends to call entitlements API without session cookies
-4. **Stripe billing integration** — Connect plans to Stripe products/prices. See `docs/04-BILLING-PRICING-MODEL.md`
-5. **Public website** — Marketing pages, pricing page, sign-up flow
 
 ## [0.1.0] — Phase 1: Scaffold
 
