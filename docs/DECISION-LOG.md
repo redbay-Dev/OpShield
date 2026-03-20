@@ -45,4 +45,102 @@ Every architectural, product, and workflow decision is recorded here with ration
 **Rationale:** Port 3000 is the natural "platform" port. Frontend 5170 precedes both product frontends.
 **Alternatives considered:** None — sequential numbering.
 
+### DEC-005: SafeSpec as two separate purchasable modules (WHS + HVA)
+**Date:** 2026-03-20
+**Context:** SafeSpec covers two distinct compliance domains: Work Health & Safety (WHS) and Heavy Vehicle Accreditation (HVA/NHVAS). Not every customer needs both — a construction company may only need WHS, while a trucking company may only need HVA. Some (heavy haulage + construction) need both.
+**Decision:** SafeSpec is sold as two independent modules: WHS and HVA Compliance. Each has its own pricing tiers. Fleet Maintenance is a premium add-on within HVA. Customers select one or both modules at sign-up. OpShield tracks module subscriptions via `tenant_modules` table. SafeSpec enforces module access at API middleware and frontend route guard levels.
+**Rationale:** Forcing customers to pay for WHS when they only need fatigue management (or vice versa) would price out single-domain operators. Modular pricing aligns cost with value. Module enforcement prevents accidental access to unpaid features.
+**Alternatives considered:** Sell SafeSpec as a single product with all features (simpler but overpriced for single-domain users); separate SafeSpec into two completely independent products (increases maintenance burden, loses shared worker/vehicle data).
+
+### DEC-006: Nexum optional modules with cross-product dependency
+**Date:** 2026-03-20
+**Context:** Nexum has 11 optional modules beyond its core (Jobs, Scheduling, Business Entities, Dashboard). The "Compliance" module specifically integrates with SafeSpec for compliance status badges, pre-start checks, and licence/medical alerts.
+**Decision:** Nexum core is always included. Optional modules are individually purchasable. The Compliance module has a cross-product dependency — it requires an active SafeSpec subscription (WHS and/or HVA). OpShield validates this dependency before enabling the module and disables it if SafeSpec is cancelled.
+**Rationale:** Compliance data lives in SafeSpec. Without SafeSpec, there's nothing for Nexum's compliance features to display. Enforcing this at the platform level prevents broken UX and wasted subscription spend.
+**Alternatives considered:** Allow compliance module without SafeSpec (shows empty/stub data — confusing); bundle SafeSpec into Nexum compliance module (creates hidden pricing complexity).
+
+### DEC-007: Three-layer module enforcement (OpShield → Backend → Frontend)
+**Date:** 2026-03-20
+**Context:** Module access must be reliably enforced. A single layer of enforcement is insufficient — frontend-only checks can be bypassed, backend-only checks leave poor UX.
+**Decision:** Module enforcement happens at three layers: (1) OpShield is the source of truth for entitlements, (2) Product backends enforce via API middleware (403 for unsubscribed modules), (3) Product frontends hide UI and show upgrade prompts. Backend enforcement is the security boundary — frontend is cosmetic convenience.
+**Rationale:** Defence in depth. The backend must never trust the frontend. OpShield must never trust products to self-enforce. Each layer serves a different purpose: OpShield tracks billing truth, backend enforces security, frontend provides UX.
+**Alternatives considered:** Frontend-only enforcement (insecure — API still accessible); single centralized check in OpShield per request (adds latency, creates single point of failure).
+
+### DEC-009: Base + per-user pricing model
+**Date:** 2026-03-20
+**Context:** Need a pricing model that works for solo operators (3 users) and mid-size companies (50+ users) without pricing out small customers or leaving money on the table with large ones.
+**Decision:** Every module has a base price that includes N users (e.g., 5 for Starter). Additional users are charged per-user per month. Nexum optional modules are flat add-ons that share the Core module's user allocation. Bundle discounts apply when a tenant subscribes to both products. Annual billing gets 2 months free.
+**Rationale:** Base + per-user is the standard SaaS pricing model (Atlassian, Slack, etc.). Included users remove friction at the low end. Per-user scaling captures value at the high end. Flat module add-ons keep Nexum simple — no separate user counts per module.
+**Alternatives considered:** Flat pricing per tier with hard user caps (punishes growth, forces awkward tier jumps); pure per-user pricing (no base = looks expensive for 1-2 users); vehicle-based pricing for HVA (users rejected — some vehicles have multiple drivers, some drivers use multiple vehicles).
+
+### DEC-010: OpShield does not manage product users
+**Date:** 2026-03-20
+**Context:** OpShield could centrally manage all user accounts across products, or it could delegate user management to each product.
+**Decision:** Each product manages its own users, roles, and permissions. OpShield only tracks user counts (seats used vs seats purchased) for billing purposes. OpShield's billing dashboard shows licence usage but links out to the product for actual user management.
+**Rationale:** Products have fundamentally different role models — Nexum has dispatcher/finance/compliance, SafeSpec has safety_officer/supervisor/worker. Centralising user management in OpShield would require OpShield to understand product-specific roles, violating the "no business logic in OpShield" principle. Products are the authority on who their users are and what they can do. OpShield is the authority on how many seats are paid for.
+**Alternatives considered:** Full central user management in OpShield (creates coupling, requires OpShield to know about dispatchers and safety officers); hybrid where OpShield creates the user and products assign roles (complex, two-step invite flow, confusing for tenants).
+
+### DEC-008: Module entitlements cached with webhook invalidation
+**Date:** 2026-03-20
+**Context:** Products need to check module access on every request. Calling OpShield on every request adds latency and creates a dependency.
+**Decision:** Products cache entitlements in Redis (TTL: 15 minutes). OpShield sends HMAC-signed webhooks when module status changes, which immediately invalidate the cache. Auth validation is cached separately (TTL: 5 minutes).
+**Rationale:** Balances performance (no per-request calls to OpShield) with freshness (webhook-driven invalidation means changes propagate in seconds, not minutes). TTL provides fallback if webhook delivery fails.
+**Alternatives considered:** No caching (too much latency); long TTL without webhooks (stale data for up to an hour after module changes); embed entitlements in JWT (token bloat, complex refresh logic).
+
+### DEC-011: Centralized support hub in OpShield
+**Date:** 2026-03-20
+**Context:** Tenants using SafeSpec or Nexum need a way to get support. Support could live in each product, or be centralized.
+**Decision:** OpShield is the single support hub for all products. Users submit tickets from within any product (via email or API). OpShield processes inbound emails, creates tickets with full tenant context (company, plan, modules, user role), and provides a ticket management dashboard in Platform Admin. Users interact via email — they never need to log into OpShield for support.
+**Rationale:** Centralizing support gives one view of all tickets across all products, avoids duplicating ticketing logic in SafeSpec and Nexum, and enriches tickets with billing/subscription context that products don't have. Email-based interaction is zero-friction for users — no new tool to learn. Admin gets full tenant context for fast triage (one-click impersonation, subscription details, module info).
+**Alternatives considered:** Third-party helpdesk (Zendesk, Freshdesk — adds external dependency and cost, loses tight integration with tenant data); support in each product separately (duplicated effort, no cross-product visibility); shared inbox without ticketing (no tracking, no SLA, no metrics).
+
+### DEC-012: Email-first support with API fallback
+**Date:** 2026-03-20
+**Context:** How should support tickets flow from products to OpShield?
+**Decision:** Primary channel is email — products send structured emails to `support@redbay.com.au` with custom headers for automatic parsing. OpShield processes inbound emails (via email provider webhook) to create/update tickets. API endpoint exists as fallback for real-time submission. User replies to response emails are threaded back into the ticket automatically.
+**Rationale:** Email is universally understood, works when OpShield API is down, and gives users a natural reply mechanism. Custom headers (`X-Redbay-Product`, `X-Redbay-Tenant-Id`) allow automatic enrichment without requiring the user to provide context manually. API fallback ensures tickets can still be created if email infrastructure has issues.
+**Alternatives considered:** API-only (fails if OpShield is down, users can't reply naturally); in-app chat (requires WebSocket infrastructure, real-time staffing); form-only without email threading (users lose context, have to log in to check status).
+
+### DEC-013: JWT/JWKS for cross-domain auth (not shared cookies)
+**Date:** 2026-03-20
+**Context:** SafeSpec and Nexum are on different domains (app.safespec.com.au vs app.nexum.com.au). Browser cookies cannot be shared across different domains. We need SSO without a shared cookie.
+**Decision:** OpShield issues signed JWT access tokens via Better Auth's JWT plugin. Products validate tokens locally using OpShield's JWKS endpoint (/.well-known/jwks.json) — no per-request callback to OpShield. JWTs are short-lived (1 hour), audience-scoped (a Nexum token can't be used in SafeSpec), and products create their own local session cookies after validation.
+**Rationale:** Stateless validation via JWKS is the industry standard for cross-domain SSO (same pattern as Auth0, Okta, Keycloak). No per-request call to OpShield means products aren't bottlenecked by auth service latency. Audience scoping prevents token misuse across products.
+**Alternatives considered:** Shared session store in Redis (products would need shared Redis access — tight coupling); OpShield as OAuth2 provider with authorization code flow (more complex, Better Auth's JWT plugin achieves the same result more simply); cookie on shared parent domain (would require all products on subdomains of one domain — constrains branding).
+
+### DEC-014: Mandatory 2FA with 30-day device trust
+**Date:** 2026-03-20
+**Context:** These products handle sensitive compliance and financial data. 2FA is mandatory for security. But requiring TOTP on every login creates friction that users will resent.
+**Decision:** All users must enable TOTP-based 2FA. Devices can be trusted for 30 days — after initial 2FA verification, the device is remembered and subsequent logins skip the 2FA prompt. Trust period refreshes on each successful login. New/untrusted devices always require 2FA.
+**Rationale:** 30-day device trust matches the balance between security and usability. Users on their regular work computer authenticate with 2FA once per month. Login from a new device (or someone else's computer) always requires 2FA. Better Auth's 2FA plugin supports this natively via `trustDevice: true`.
+**Alternatives considered:** 2FA on every login (too much friction, users will complain); optional 2FA (not acceptable for compliance/financial data); SMS-based 2FA (less secure than TOTP, carrier-dependent, costs per message); WebAuthn/passkeys (Better Auth supports it, but not all users have compatible devices — can add as future option alongside TOTP).
+
+### DEC-015: Microsoft SSO with per-tenant Azure AD support
+**Date:** 2026-03-20
+**Context:** Many target customers (transport companies, construction firms) use Microsoft 365. Supporting Microsoft SSO reduces onboarding friction and lets companies enforce their own identity policies.
+**Decision:** OpShield supports Microsoft SSO via Better Auth's social provider plugin. Additionally, enterprise tenants can connect their own Azure AD tenant via the SSO plugin — employees authenticate against their company's Azure AD directory. Per-tenant SSO configuration is stored in `tenant_sso_providers` table. Tenants can optionally enforce SSO-only login (disable email/password).
+**Rationale:** Microsoft is dominant in the Australian enterprise/SME space. Per-tenant Azure AD support is a significant enterprise selling point — IT admins can manage access via their existing identity tools, enforce their own MFA policies, and auto-deprovision users. Better Auth supports this natively.
+**Alternatives considered:** Only global Microsoft SSO without per-tenant config (insufficient for enterprise customers who want their own directory); Google Workspace SSO instead (less dominant in target market, but can be added later); roll our own SAML implementation (unnecessary — Better Auth's SSO plugin handles this).
+
+### DEC-016: Dual-auth migration strategy (not big-bang cutover)
+**Date:** 2026-03-20
+**Context:** SafeSpec and Nexum both have embedded Better Auth instances with existing user tables. Moving to OpShield's centralized auth requires migrating users without disruption.
+**Decision:** Use a dual-auth transition period: products accept BOTH their embedded auth sessions AND OpShield JWTs simultaneously. New sign-ups go through OpShield. Existing users continue with embedded auth until migrated. User IDs are preserved (same UUIDs) to avoid updating foreign key references. Product auth tables are kept for 30 days after cutover as rollback safety net.
+**Rationale:** Big-bang cutover risks locking out all users if something goes wrong. Dual-auth allows gradual migration with zero downtime. Preserving user IDs is critical — every audit log entry, tenant_users record, and document ownership reference uses the user UUID.
+**Alternatives considered:** Big-bang migration on a weekend (risky, no rollback path if auth breaks); run both auth systems permanently (maintenance burden, confusing); create new user IDs in OpShield and update all references (massive migration, error-prone).
+
+### DEC-017: Shared types package (@redbay/platform-types)
+**Date:** 2026-03-20
+**Context:** OpShield, SafeSpec, and Nexum all need to agree on types for entitlements responses, webhook payloads, support tickets, and module IDs. Without shared types, interfaces drift apart across repos.
+**Decision:** Create a `@redbay/platform-types` package in OpShield's monorepo containing Zod schemas and TypeScript types for all platform API contracts. Products consume this package via workspace path or private registry. Type changes follow semver — breaking type changes require a major version bump.
+**Rationale:** Single source of truth for the platform contract. TypeScript compiler catches breaking changes at build time rather than runtime. Zod schemas are used for runtime validation in both OpShield (response) and products (request parsing).
+**Alternatives considered:** Copy types manually to each repo (drift guaranteed); generate types from OpenAPI spec (adds tooling complexity, loses Zod integration); share via git submodule (poor DX, merge conflicts).
+
+### DEC-018: API versioning with URL prefix (v1)
+**Date:** 2026-03-20
+**Context:** The platform APIs (entitlements, support, webhooks) are contracts between OpShield and products. Breaking changes would break products.
+**Decision:** All platform APIs use URL-prefixed versioning (`/api/v1/...`). Non-breaking changes (new optional fields, new endpoints) don't require version bumps. Breaking changes require a new version with 6-month deprecation period for the old version. Changes logged in `docs/API-CHANGELOG.md`.
+**Rationale:** URL-prefixed versioning is simple, explicit, and cacheable. The 6-month deprecation window gives time to update products. Since Ryan maintains all three codebases, the deprecation period is more about not having to update everything simultaneously than about external API consumers.
+**Alternatives considered:** No versioning (fragile — any change can break products); header-based versioning (harder to debug, less visible); per-endpoint versioning (inconsistent).
+
 ---

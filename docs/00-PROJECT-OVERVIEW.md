@@ -19,15 +19,17 @@ OpShield is the **platform layer** for the Redbay product suite. It is not a use
 
 1. **Authentication** — Single Better Auth SSO instance trusted by all products
 2. **Tenant Provisioning** — Creates tenant schemas in product databases when customers sign up
-3. **Billing** — Stripe subscriptions, plan management, usage tracking, invoicing
+3. **Billing & Licensing** — Stripe subscriptions, module pricing, user licence tracking, invoicing
 4. **Public Website** — Marketing pages, pricing, sign-up flow, login with redirect
 5. **Platform Admin** — Redbay staff dashboard for tenant management, analytics, support tools
+6. **Support Hub** — Centralized support ticketing for all products (inbound email, ticket management, response tracking)
 
 ### What OpShield Does NOT Do
 
-- No business logic (doesn't know what a job, driver, hazard, or inspection is)
-- No API brokering (products talk directly to each other)
-- No data storage for product data (each product owns its own database)
+- **No user management** — Each product manages its own users, roles, and permissions. OpShield only tracks user **counts** for billing (licence seats used vs purchased). The "Manage Users" action always links out to the product.
+- **No business logic** — Doesn't know what a job, driver, hazard, or inspection is
+- **No API brokering** — Products talk directly to each other
+- **No product data storage** — Each product owns its own database
 
 ---
 
@@ -55,17 +57,35 @@ OpShield is the **platform layer** for the Redbay product suite. It is not a use
 
 ### SafeSpec
 - **What**: WHS and NHVAS/HVA compliance management SaaS
-- **Features**: Hazard registers, incident reporting, SWMS, inspections, fatigue management, audit preparation, PDF pre-fill
+- **Structure**: TWO separate purchasable modules — not a single product
+  - **WHS Module** — Work Health & Safety (hazards, incidents, SWMS, inspections, corrective actions)
+  - **HVA Compliance Module** — Heavy Vehicle Accreditation / NHVAS compliance (fatigue, mass management, fitness to drive, SMS builder, CoR)
+  - **Fleet Maintenance** — Premium add-on within HVA (preventive maintenance, defect management, work orders)
+- **Key rule**: Signing up to SafeSpec does NOT grant access to everything. Tenants must select WHS, HVA, or both. Features are gated per module subscription.
 - **Path**: `/home/redbay/saas-project`
 - **Ports**: API 3001, Frontend 5173
+
+### Nexum
+- **What**: Multi-tenant SaaS for Australian transport, earthmoving, civil construction, and logistics
+- **Structure**: Core (always included) + 11 optional modules
+  - **Core** (always): Jobs, Business Entities, Scheduling, Dashboard
+  - **Optional**: Invoicing, RCTI, Xero, Compliance, SMS, Docket Processing, Materials, Map Planning, AI Automation, Reporting, Portal
+- **Key rule**: The Nexum `Compliance` module requires an active SafeSpec subscription. If the tenant cancels SafeSpec, compliance features in Nexum are disabled.
+- **Path**: `/home/redbay/Nexum-SaaS`
+- **Ports**: API 3002, Frontend 5174
 
 ### Sales Model
 
 | Configuration | What Customer Gets |
 |--------------|-------------------|
-| Nexum only | Operations platform, no compliance features |
-| SafeSpec only | Compliance management, no operations features |
-| Both (bundled) | Full suite — compliance data flows into operations, operational data flows into compliance |
+| SafeSpec WHS only | WHS features only. No HVA/fatigue/mass/vehicle/CoR features. |
+| SafeSpec HVA only | HVA features only. No hazards, incidents, SWMS, inspections. |
+| SafeSpec WHS + HVA | Full SafeSpec suite with cross-module reporting. |
+| Nexum only | Operations platform. Select which optional modules to enable. |
+| Nexum + SafeSpec | Full suite. Nexum compliance module can pull from SafeSpec. |
+| Any combination | Mix and match products and modules per tenant. |
+
+> **Full module architecture details:** See `docs/01-PRODUCT-MODULE-ARCHITECTURE.md`
 
 ---
 
@@ -164,6 +184,55 @@ product_connections
 ├── status (enum: active, disabled)
 ├── created_at
 └── updated_at
+
+product_modules
+├── id (text — "whs", "hva", "fleet_maintenance", "invoicing", etc.)
+├── product_id → products.id
+├── name (text — display name)
+├── description (text)
+├── is_core (boolean — always included with product)
+├── is_add_on (boolean — add-on to another module)
+├── parent_module_id (text, nullable — e.g., fleet_maintenance → hva)
+├── requires_product_ids (text[] — cross-product deps)
+├── pricing_config (JSONB)
+├── sort_order (integer)
+├── active (boolean)
+├── created_at
+└── updated_at
+
+tenant_modules
+├── id (UUID)
+├── tenant_id → tenants.id
+├── tenant_product_id → tenant_products.id
+├── module_id → product_modules.id
+├── status (enum: active, suspended, cancelled)
+├── plan (text, nullable)
+├── stripe_subscription_item_id (text, nullable)
+├── activated_at
+├── config (JSONB)
+├── created_at
+└── updated_at
+
+support_tickets
+├── id (UUID)
+├── ticket_number (text — "T-089")
+├── product_id (text)
+├── tenant_id → tenants.id
+├── user_id → user.id
+├── category (enum: bug_report, feature_request, billing, how_to, account, other)
+├── subject (text)
+├── priority (enum: low, medium, high, urgent)
+├── status (enum: open, in_progress, waiting_on_customer, resolved, closed)
+├── assigned_to → platform_admins.id
+├── created_at, updated_at, deleted_at
+
+support_messages
+├── id (UUID)
+├── ticket_id → support_tickets.id
+├── sender_type (enum: customer, admin, system)
+├── body (text)
+├── is_internal_note (boolean)
+├── created_at (immutable)
 ```
 
 ---
@@ -223,16 +292,22 @@ product_connections
 
 | Doc | Description |
 |-----|-------------|
-| `00-PROJECT-OVERVIEW.md` | This file |
-| `01-AUTH-ARCHITECTURE.md` | Better Auth SSO, session management, token validation |
-| `02-TENANT-PROVISIONING.md` | How tenants are created and schemas provisioned |
-| `03-BILLING-STRIPE.md` | Stripe integration, plans, webhooks |
-| `04-PUBLIC-WEBSITE.md` | Marketing pages, sign-up flow |
-| `05-PLATFORM-ADMIN.md` | Redbay staff dashboard |
-| `06-TECHNICAL-ARCHITECTURE.md` | Infrastructure, deployment, monitoring |
+| `00-PROJECT-OVERVIEW.md` | This file — project identity, stack, schema, build phases |
+| `01-PRODUCT-MODULE-ARCHITECTURE.md` | Product & module hierarchy, enforcement, sign-up flow |
+| `02-TENANT-PROVISIONING.md` | Tenant creation, schema provisioning, module seeding |
+| `03-INTEGRATION-ARCHITECTURE.md` | How OpShield/SafeSpec/Nexum communicate, webhook security |
+| `04-BILLING-PRICING-MODEL.md` | Pricing model, Stripe integration, user licensing, usage tracking |
+| `05-PLATFORM-ADMIN.md` | Redbay staff admin dashboard, impersonation, analytics |
+| `06-SUPPORT-SYSTEM.md` | Centralized support ticketing, email processing, SLAs |
+| `07-AUTH-ARCHITECTURE.md` | Better Auth SSO, Microsoft SSO, 2FA, JWT/JWKS, migration |
+| `08-NOTIFICATIONS-EMAIL.md` | Platform transactional emails, billing alerts, templates |
+| `09-PLATFORM-API-CONTRACTS.md` | API versioning, shared types, rate limiting, resilience |
+| `06-PUBLIC-WEBSITE.md` | Marketing pages, sign-up flow |
+| `07-PLATFORM-ADMIN.md` | Redbay staff dashboard |
+| `08-TECHNICAL-ARCHITECTURE.md` | Infrastructure, deployment, monitoring |
 | `DECISION-LOG.md` | All architectural decisions |
 
-*Note: Docs 01-06 are planned but not yet written. This overview is the starting point.*
+*All planned docs are now written.*
 
 ---
 

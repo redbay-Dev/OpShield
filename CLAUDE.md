@@ -12,7 +12,7 @@
 - **Backend**: Node.js 24 LTS + Fastify 5 + TypeScript 5.9
 - **Database**: PostgreSQL 15 (flat schema — NOT multi-tenant)
 - **ORM**: Drizzle ORM 0.45
-- **Auth**: Better Auth 1.5 (THE auth instance — all products delegate to this)
+- **Auth**: Better Auth 1.5 (THE auth instance — email/password + Microsoft SSO + mandatory 2FA with 30-day device trust + JWT/JWKS for cross-domain validation)
 - **Billing**: Stripe Billing
 - **Validation**: Zod 4
 - **Monorepo**: pnpm 10 workspaces + Turborepo 2.8
@@ -25,7 +25,8 @@ OpShield/
   packages/
     frontend/          # React + Vite (public website + admin dashboard)
     backend/           # Fastify (auth, provisioning, billing APIs)
-    shared/            # Shared types, schemas, constants
+    shared/            # Shared types, schemas, constants (internal)
+    platform-types/    # @redbay/platform-types — shared contract types for SafeSpec/Nexum
   docs/                # Project documentation
   docker/              # Docker compose (if needed)
   scripts/             # Dev scripts, migrations
@@ -56,11 +57,37 @@ OpShield/
 3. **Billing (Stripe)** — Subscriptions, plans, usage tracking, invoicing
 4. **Public Website** — Marketing, pricing, sign-up, login with redirect
 5. **Platform Admin** — Redbay staff dashboard for managing everything
+6. **Support Hub** — Centralized support ticketing for all products (email-based for users, dashboard for admin)
 
 ## What OpShield Does NOT Own
+- **No user management** — Each product manages its own users/roles/permissions. OpShield only tracks user COUNTS for billing (licence seats used vs purchased).
 - No business logic (doesn't know jobs, drivers, hazards, inspections)
 - No API brokering (products talk directly to each other)
 - No product data storage (each product owns its own DB)
+
+## Pricing Model
+- Base price per module + included users (e.g., 5) + per-user charge beyond that
+- Nexum optional modules are flat add-ons (use Core's user allocation)
+- SafeSpec WHS and HVA have independent user counts and tiers
+- Bundle discount when tenant has both products
+- Annual billing = 2 months free
+- See `docs/04-BILLING-PRICING-MODEL.md` for full details
+
+## Module Architecture (CRITICAL)
+Products are modular — signing up does NOT grant access to everything:
+
+**SafeSpec** has TWO separately purchasable modules:
+- **WHS Module** — Work Health & Safety (hazards, incidents, SWMS, inspections, corrective actions)
+- **HVA Module** — Heavy Vehicle Accreditation (fatigue, mass mgmt, fitness to drive, SMS builder, CoR)
+- **Fleet Maintenance** — Premium add-on within HVA only
+- Tenants choose WHS, HVA, or both. Features are gated per module.
+
+**Nexum** has Core (always included) + 11 optional modules:
+- Core: Jobs, Business Entities, Scheduling, Dashboard
+- Optional: Invoicing, RCTI, Xero, Compliance, SMS, Dockets, Materials, Map Planning, AI, Reporting, Portal
+- The `Compliance` module requires an active SafeSpec subscription
+
+**Enforcement:** Three layers — OpShield (source of truth), Product Backend (403 middleware), Product Frontend (UI guards). See `docs/01-PRODUCT-MODULE-ARCHITECTURE.md`.
 
 ## Critical Rules
 
@@ -101,6 +128,15 @@ Same as Nexum/SafeSpec:
 | Doc | When to Read |
 |-----|-------------|
 | `docs/00-PROJECT-OVERVIEW.md` | Starting any work |
+| `docs/01-PRODUCT-MODULE-ARCHITECTURE.md` | Module structure, enforcement, pricing |
+| `docs/02-TENANT-PROVISIONING.md` | Tenant creation, schema provisioning |
+| `docs/03-INTEGRATION-ARCHITECTURE.md` | How products communicate, webhook security |
+| `docs/04-BILLING-PRICING-MODEL.md` | Pricing model, Stripe, user licensing |
+| `docs/05-PLATFORM-ADMIN.md` | Redbay staff admin dashboard |
+| `docs/06-SUPPORT-SYSTEM.md` | Support ticketing, email processing |
+| `docs/07-AUTH-ARCHITECTURE.md` | SSO, 2FA, JWT/JWKS, Microsoft SSO, migration |
+| `docs/08-NOTIFICATIONS-EMAIL.md` | Platform emails, billing alerts |
+| `docs/09-PLATFORM-API-CONTRACTS.md` | API versioning, shared types, rate limits |
 | `docs/DECISION-LOG.md` | All architectural decisions |
 | Nexum platform doc | `/home/redbay/Nexum-SaaS/docs/24-OPSHIELD-PLATFORM.md` |
 | SafeSpec platform doc | `/home/redbay/saas-project/docs/24-OPSHIELD-PLATFORM.md` |
