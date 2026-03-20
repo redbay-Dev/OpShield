@@ -13,6 +13,16 @@ export const createTenantSchema = z.object({
 
 export type CreateTenantInput = z.infer<typeof createTenantSchema>;
 
+/** Plan info attached to module entitlements */
+export const modulePlanSchema = z.object({
+  tier: z.string(),
+  includedUsers: z.number().int(),
+  basePrice: z.string(),
+  perUserPrice: z.string(),
+});
+
+export type ModulePlan = z.infer<typeof modulePlanSchema>;
+
 /** Module entitlement response schema */
 export const moduleEntitlementSchema = z.object({
   productId: z.string(),
@@ -20,6 +30,7 @@ export const moduleEntitlementSchema = z.object({
   status: z.string(),
   maxUsers: z.number().int().positive(),
   currentUsers: z.number().int().min(0),
+  plan: modulePlanSchema.nullable().optional(),
 });
 
 export type ModuleEntitlement = z.infer<typeof moduleEntitlementSchema>;
@@ -72,3 +83,27 @@ export const tenantIdParamSchema = z.object({
 });
 
 export type TenantIdParam = z.infer<typeof tenantIdParamSchema>;
+
+/** Add module to tenant */
+export const addModuleSchema = z.object({
+  productId: z.enum(["safespec", "nexum"]),
+  moduleId: z.string().min(1).max(50),
+  maxUsers: z.number().int().positive().default(5),
+  status: z.enum(["active", "trial"]).default("active"),
+});
+
+export type AddModuleInput = z.infer<typeof addModuleSchema>;
+
+/** Update module on tenant */
+export const updateModuleSchema = z.object({
+  status: z.enum(["active", "trial", "suspended", "cancelled"]).optional(),
+  maxUsers: z.number().int().positive().optional(),
+});
+
+export type UpdateModuleInput = z.infer<typeof updateModuleSchema>;
+
+/** Path params for module routes */
+export const moduleIdParamSchema = z.object({
+  tenantId: z.string().uuid(),
+  moduleId: z.string().min(1),
+});

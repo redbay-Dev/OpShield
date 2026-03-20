@@ -95,12 +95,10 @@ export function DashboardLayout(): React.JSX.Element {
           <div className="flex items-center justify-between">
             {/* Mobile menu */}
             <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-              <SheetTrigger
-                render={
-                  <Button variant="ghost" size="icon" className="lg:hidden" />
-                }
-              >
-                <Menu className="h-5 w-5" />
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon" className="lg:hidden">
+                  <Menu className="h-5 w-5" />
+                </Button>
               </SheetTrigger>
               <SheetContent side="left" className="w-64 p-0">
                 <SheetTitle className="sr-only">Navigation</SheetTitle>
@@ -112,13 +110,13 @@ export function DashboardLayout(): React.JSX.Element {
 
             {/* User menu */}
             <DropdownMenu>
-              <DropdownMenuTrigger
-                render={<Button variant="ghost" className="gap-2" />}
-              >
-                <span className="text-sm">
-                  {session?.user.name ?? session?.user.email ?? "Admin"}
-                </span>
-                <ChevronDown className="h-4 w-4" />
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="gap-2">
+                  <span className="text-sm">
+                    {session?.user.name ?? session?.user.email ?? "Admin"}
+                  </span>
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={() => void handleSignOut()}>

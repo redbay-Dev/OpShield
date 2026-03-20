@@ -53,7 +53,7 @@ OpShield is the **platform layer** for the Redbay product suite. It is not a use
 - **What**: Multi-tenant SaaS for Australian transport, earthmoving, civil construction, and logistics
 - **Features**: Jobs, scheduling, drivers, assets, contractors, pricing, invoicing, dockets, mobile app (DriverX)
 - **Path**: `/home/redbay/Nexum-SaaS`
-- **Ports**: API 3002, Frontend 5174
+- **Ports**: API 3002, Frontend 5171
 
 ### SafeSpec
 - **What**: WHS and NHVAS/HVA compliance management SaaS
@@ -63,7 +63,7 @@ OpShield is the **platform layer** for the Redbay product suite. It is not a use
   - **Fleet Maintenance** — Premium add-on within HVA (preventive maintenance, defect management, work orders)
 - **Key rule**: Signing up to SafeSpec does NOT grant access to everything. Tenants must select WHS, HVA, or both. Features are gated per module subscription.
 - **Path**: `/home/redbay/saas-project`
-- **Ports**: API 3001, Frontend 5173
+- **Ports**: API 3001, Frontend 5172
 
 ### Nexum
 - **What**: Multi-tenant SaaS for Australian transport, earthmoving, civil construction, and logistics
@@ -72,7 +72,7 @@ OpShield is the **platform layer** for the Redbay product suite. It is not a use
   - **Optional**: Invoicing, RCTI, Xero, Compliance, SMS, Docket Processing, Materials, Map Planning, AI Automation, Reporting, Portal
 - **Key rule**: The Nexum `Compliance` module requires an active SafeSpec subscription. If the tenant cancels SafeSpec, compliance features in Nexum are disabled.
 - **Path**: `/home/redbay/Nexum-SaaS`
-- **Ports**: API 3002, Frontend 5174
+- **Ports**: API 3002, Frontend 5171
 
 ### Sales Model
 

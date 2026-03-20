@@ -40,7 +40,7 @@ Every architectural, product, and workflow decision is recorded here with ration
 
 ### DEC-004: API port 3000, frontend port 5170
 **Date:** 2026-03-20
-**Context:** SafeSpec uses 3001/5173, Nexum uses 3002/5174. Need non-conflicting ports.
+**Context:** SafeSpec uses 3001/5172, Nexum uses 3002/5171. Need non-conflicting ports.
 **Decision:** OpShield API on 3000, frontend on 5170. Redis prefix `opshield:`, database `opshield_dev`.
 **Rationale:** Port 3000 is the natural "platform" port. Frontend 5170 precedes both product frontends.
 **Alternatives considered:** None — sequential numbering.
@@ -191,5 +191,12 @@ Every architectural, product, and workflow decision is recorded here with ration
 **Decision:** Created `GET /api/v1/me/admin-status` returning `{ isPlatformAdmin: boolean }`. Cached 5 minutes client-side.
 **Rationale:** Avoids exposing `platform_admins` table structure. Separates admin check from session check (Better Auth doesn't know about platform admins).
 **Alternatives considered:** Embed admin status in JWT payload (token bloat, requires Better Auth customization); catch 403 on admin endpoints (fragile UX).
+
+### DEC-026: Cross-product dependency enforcement in module management
+**Date:** 2026-03-20
+**Context:** Nexum's Compliance module requires an active SafeSpec subscription (WHS or HVA). This dependency needs enforcement when adding or removing modules.
+**Decision:** Module management API enforces dependencies bidirectionally: (1) Adding `nexum-compliance` requires at least one active SafeSpec module on the tenant. (2) Removing a SafeSpec module is blocked if it's the last active SafeSpec module and `nexum-compliance` is active. Hard delete (not soft delete) for module removal — modules are entitlements, not records with history.
+**Rationale:** Prevents broken states where Nexum Compliance has no SafeSpec data to display. Hard delete is appropriate because module entitlements are a current-state table, not an audit trail (audit log records all changes separately).
+**Alternatives considered:** Soft delete with status "removed" (complicates re-addition logic); cascading removal of Nexum Compliance when last SafeSpec module removed (too aggressive — admin should make that decision explicitly).
 
 ---

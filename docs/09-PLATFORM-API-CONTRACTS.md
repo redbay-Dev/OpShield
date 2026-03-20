@@ -315,10 +315,10 @@ All three projects run simultaneously on the dev server:
 cd /home/redbay/OpShield && pnpm dev    # API :3000, Frontend :5170
 
 # Terminal 2: SafeSpec
-cd /home/redbay/saas-project && pnpm dev  # API :3001, Frontend :5173
+cd /home/redbay/saas-project && pnpm dev  # API :3001, Frontend :5172
 
 # Terminal 3: Nexum
-cd /home/redbay/Nexum-SaaS && pnpm dev    # API :3002, Frontend :5174
+cd /home/redbay/Nexum-SaaS && pnpm dev    # API :3002, Frontend :5171
 ```
 
 ### Shared Types Sync

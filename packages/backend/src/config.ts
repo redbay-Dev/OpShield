@@ -49,8 +49,8 @@ export const config = {
   },
   frontendUrl: process.env.FRONTEND_URL ?? "http://localhost:5170",
   productUrls: {
-    nexum: process.env.NEXUM_URL ?? "http://localhost:5174",
-    safespec: process.env.SAFESPEC_URL ?? "http://localhost:5173",
+    nexum: process.env.NEXUM_URL ?? "http://localhost:5171",
+    safespec: process.env.SAFESPEC_URL ?? "http://localhost:5172",
   },
   logLevel: process.env.LOG_LEVEL ?? "info",
 } as const;

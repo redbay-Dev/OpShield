@@ -1,10 +1,27 @@
-import { Building2, CheckCircle, AlertTriangle, XCircle } from "lucide-react";
+import { Link } from "react-router";
+import {
+  Building2,
+  CheckCircle,
+  AlertTriangle,
+  XCircle,
+  ArrowRight,
+} from "lucide-react";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from "@frontend/components/ui/card.js";
+import { Badge } from "@frontend/components/ui/badge.js";
+import { Button } from "@frontend/components/ui/button.js";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@frontend/components/ui/table.js";
 import { useTenants } from "@frontend/hooks/use-tenants.js";
 
 interface StatCardProps {
@@ -13,6 +30,16 @@ interface StatCardProps {
   icon: React.ComponentType<{ className?: string }>;
   description?: string;
 }
+
+const STATUS_VARIANT: Record<
+  string,
+  "default" | "secondary" | "destructive" | "outline"
+> = {
+  active: "default",
+  onboarding: "secondary",
+  suspended: "destructive",
+  cancelled: "outline",
+};
 
 function StatCard({
   title,
@@ -50,6 +77,7 @@ export function DashboardPage(): React.JSX.Element {
     limit: 1,
     status: "onboarding",
   });
+  const { data: recentTenants } = useTenants({ limit: 5 });
 
   return (
     <div className="space-y-6">
@@ -86,6 +114,68 @@ export function DashboardPage(): React.JSX.Element {
           description="Temporarily disabled"
         />
       </div>
+
+      {/* Recent Tenants */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Recent Tenants</CardTitle>
+          <Link to="/admin/tenants">
+            <Button variant="ghost" size="sm">
+              View all
+              <ArrowRight className="ml-1 h-3 w-3" />
+            </Button>
+          </Link>
+        </CardHeader>
+        <CardContent>
+          {recentTenants?.items.length === 0 ? (
+            <p className="text-muted-foreground py-4 text-center text-sm">
+              No tenants yet
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead className="w-[50px]" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {recentTenants?.items.map((t) => (
+                  <TableRow key={t.id}>
+                    <TableCell>
+                      <div>
+                        <span className="font-medium">{t.name}</span>
+                        <span className="text-muted-foreground ml-2 font-mono text-xs">
+                          {t.slug}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={STATUS_VARIANT[t.status] ?? "outline"}
+                      >
+                        {t.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-sm">
+                      {new Date(t.createdAt).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell>
+                      <Link to={`/admin/tenants/${t.id}`}>
+                        <Button variant="ghost" size="icon" className="h-7 w-7">
+                          <ArrowRight className="h-3 w-3" />
+                        </Button>
+                      </Link>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

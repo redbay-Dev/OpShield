@@ -128,11 +128,11 @@ export async function tenantRoutes(app: FastifyInstance): Promise<void> {
 
       return reply.send({
         success: true,
-        data: rows.map(formatTenant),
-        pagination: {
+        data: {
+          items: rows.map(formatTenant),
+          total,
           page,
           limit,
-          total,
           totalPages: Math.ceil(total / limit),
         },
       });

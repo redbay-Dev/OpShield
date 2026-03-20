@@ -2,7 +2,36 @@
 
 All notable changes to OpShield are documented here.
 
-## [Unreleased] — Phase 3: Auth UI + Platform Admin Dashboard
+## [Unreleased] — Phase 4: Module Management + Half-Built Fixes
+
+### Added
+- **Module Management API**: Full CRUD for tenant modules (`POST/PATCH/DELETE /api/v1/tenants/:tenantId/modules/:moduleId`). Validates module belongs to product, enforces Nexum Compliance→SafeSpec dependency, prevents removing last SafeSpec module when Nexum Compliance is active. All operations audit-logged.
+- **Module Management UI**: Add Module dialog (product/module picker, max users, status), inline status editing (click badge to change), remove module button with dependency protection
+- **Dashboard improvements**: Recent tenants table with status badges and quick navigation links
+- **Enriched entitlements response**: Modules now include matched plan info (tier, basePrice, perUserPrice, includedUsers) from the plans table
+- **Module management schemas**: `addModuleSchema`, `updateModuleSchema`, `moduleIdParamSchema` in shared package
+- **`apiDelete` client function**: Frontend HTTP DELETE support
+- **Plan schema in entitlements**: `modulePlanSchema` added to shared and platform-types packages
+- **Comprehensive schema tests**: 31 validation tests covering all Zod schemas (tenant CRUD, module management, entitlements, query params)
+
+### Fixed
+- **Entitlements response**: Now includes plan info (tier, pricing) — previously returned flat modules without plan context
+- **Pagination response format**: Backend tenant list now returns `{ items, total, page, limit, totalPages }` inside `data` — previously pagination was a sibling of data, causing frontend to lose pagination info
+- **Platform-types entitlement schema**: Added `plan` field (nullable) to match enriched backend response
+- **API client response handling**: `handleResponse` now handles responses without `data` field (for DELETE operations)
+
+### Known Issues
+- `BETTER_AUTH_SECRET` in `.env.development` is placeholder — needs a proper 32+ char secret
+- No Stripe integration yet (schema only)
+- Entitlements API currently requires platform admin auth — needs service API key auth for product backends
+
+### Next Steps (Priority Order)
+1. **Service API key auth** — Allow SafeSpec/Nexum backends to call entitlements API without session cookies
+2. **Tenant provisioning flow** — Schema creation in product databases. See `docs/02-TENANT-PROVISIONING.md`
+3. **Stripe billing integration** — Connect plans to Stripe products/prices. See `docs/04-BILLING-PRICING-MODEL.md`
+4. **Public website** — Marketing pages, pricing page, sign-up flow
+
+## [0.3.0] — Phase 3: Auth UI + Platform Admin Dashboard
 
 ### Added
 - **Auth UI**: Login page, sign-up page, 2FA setup (TOTP QR code + backup codes), 2FA verification with device trust and backup code fallback
@@ -14,18 +43,6 @@ All notable changes to OpShield are documented here.
 - **shadcn/ui**: Initialized base-nova style with 13 components (button, input, label, card, dialog, table, tabs, badge, separator, avatar, dropdown-menu, sheet, sonner)
 - **Vite Config**: `@shared` path alias, `.well-known` proxy for JWKS endpoint
 - Updated frontend tests for new auth-based routing
-
-### Known Issues
-- `BETTER_AUTH_SECRET` in `.env.development` is placeholder — needs a proper 32+ char secret
-- No Stripe integration yet (schema only)
-- Entitlements API currently requires platform admin auth — needs service API key auth for product backends
-
-### Next Steps (Priority Order)
-1. **Module management API** — Endpoints to assign/revoke modules on tenants
-2. **Service API key auth** — Allow SafeSpec/Nexum backends to call entitlements API without session cookies
-3. **Tenant provisioning flow** — Schema creation in product databases. See `docs/02-TENANT-PROVISIONING.md`
-4. **Stripe billing integration** — Connect plans to Stripe products/prices. See `docs/04-BILLING-PRICING-MODEL.md`
-5. **Public website** — Marketing pages, pricing page, sign-up flow
 
 ## [0.2.0] — Phase 2: Database Foundation + Auth + Tenant CRUD + Entitlements API
 

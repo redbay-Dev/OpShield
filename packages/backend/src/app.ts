@@ -11,6 +11,7 @@ import { auth } from "./auth.js";
 import { healthRoutes } from "./routes/health.js";
 import { tenantRoutes } from "./routes/tenants.js";
 import { entitlementRoutes } from "./routes/entitlements.js";
+import { moduleRoutes } from "./routes/modules.js";
 import { meRoutes } from "./routes/me.js";
 
 const TRUSTED_ORIGINS = new Set([
@@ -201,6 +202,7 @@ export function buildApp(): ReturnType<typeof Fastify> {
       void api.register(meRoutes);
       void api.register(tenantRoutes);
       void api.register(entitlementRoutes);
+      void api.register(moduleRoutes);
     },
     { prefix: "/api/v1" },
   );

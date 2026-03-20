@@ -3,8 +3,10 @@ import type {
   CreateTenantInput,
   UpdateTenantInput,
   EntitlementsResponse,
+  AddModuleInput,
+  UpdateModuleInput,
 } from "@opshield/shared";
-import { apiGet, apiPost, apiPatch } from "./client.js";
+import { apiGet, apiPost, apiPatch, apiDelete } from "./client.js";
 
 interface PaginatedResponse<T> {
   items: T[];
@@ -56,4 +58,43 @@ export function fetchTenantEntitlements(
   return apiGet<EntitlementsResponse>(`/tenants/${tenantId}/entitlements`);
 }
 
-export type { PaginatedResponse, TenantListParams };
+// ── Module management ──
+
+interface ModuleResponse {
+  id: string;
+  tenantId: string;
+  productId: string;
+  moduleId: string;
+  status: string;
+  maxUsers: number;
+  currentUsers: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function addModule(
+  tenantId: string,
+  data: AddModuleInput,
+): Promise<ModuleResponse> {
+  return apiPost<ModuleResponse>(`/tenants/${tenantId}/modules`, data);
+}
+
+export function updateModule(
+  tenantId: string,
+  moduleId: string,
+  data: UpdateModuleInput,
+): Promise<ModuleResponse> {
+  return apiPatch<ModuleResponse>(
+    `/tenants/${tenantId}/modules/${moduleId}`,
+    data,
+  );
+}
+
+export function removeModule(
+  tenantId: string,
+  moduleId: string,
+): Promise<void> {
+  return apiDelete(`/tenants/${tenantId}/modules/${moduleId}`);
+}
+
+export type { PaginatedResponse, TenantListParams, ModuleResponse };

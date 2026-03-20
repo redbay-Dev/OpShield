@@ -48,8 +48,8 @@ OpShield/
 | Project | Path | API Port | Frontend Port |
 |---------|------|----------|---------------|
 | OpShield | `/home/redbay/OpShield` | 3000 | 5170 |
-| SafeSpec | `/home/redbay/saas-project` | 3001 | 5173 |
-| Nexum | `/home/redbay/Nexum-SaaS` | 3002 | 5174 |
+| SafeSpec | `/home/redbay/saas-project` | 3001 | 5172 |
+| Nexum | `/home/redbay/Nexum-SaaS` | 3002 | 5171 |
 
 ## What OpShield Owns
 1. **Auth (SSO)** — Single Better Auth instance, all products validate against this

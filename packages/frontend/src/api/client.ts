@@ -33,8 +33,8 @@ async function handleResponse<T>(response: Response): Promise<T> {
     throw new ApiError(response.status, code, message);
   }
 
-  const json = (await response.json()) as { success: true; data: T };
-  return json.data;
+  const json = (await response.json()) as { success: true; data?: T };
+  return json.data as T;
 }
 
 export async function apiGet<T>(
@@ -81,6 +81,16 @@ export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
       Accept: "application/json",
     },
     body: JSON.stringify(body),
+  });
+
+  return handleResponse<T>(response);
+}
+
+export async function apiDelete<T = void>(path: string): Promise<T> {
+  const response = await fetch(`${BASE_PATH}${path}`, {
+    method: "DELETE",
+    credentials: "include",
+    headers: { Accept: "application/json" },
   });
 
   return handleResponse<T>(response);

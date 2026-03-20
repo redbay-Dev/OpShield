@@ -10,8 +10,10 @@
 export {
   entitlementsResponseSchema,
   moduleEntitlementSchema,
+  modulePlanSchema,
   type EntitlementsResponse,
   type ModuleEntitlement,
+  type ModulePlan,
 } from "./entitlements.js";
 
 export {
