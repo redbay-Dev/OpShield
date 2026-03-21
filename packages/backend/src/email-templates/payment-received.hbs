@@ -1,0 +1,16 @@
+<p>Hi there,</p>
+
+<p>We have received your payment for <strong>{{companyName}}</strong>.</p>
+
+<div class="highlight">
+  <p style="margin: 0;"><strong>Amount:</strong> {{formatCurrency amountCents}} {{currency}}</p>
+  <p style="margin: 4px 0 0;"><strong>Period:</strong> {{formatDate periodStart}} &ndash; {{formatDate periodEnd}}</p>
+</div>
+
+{{#if invoiceUrl}}
+<p style="text-align: center; margin: 24px 0;">
+  <a href="{{invoiceUrl}}" class="btn">View invoice</a>
+</p>
+{{/if}}
+
+<p>Thank you for your continued subscription.</p>

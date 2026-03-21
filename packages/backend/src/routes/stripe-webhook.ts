@@ -14,6 +14,13 @@ import { constructWebhookEvent, getStripeSubscription } from "../services/stripe
 import { dispatchWebhook } from "../services/webhook.js";
 import { provisionTenant } from "../services/provisioning.js";
 import { determineCouponId } from "../services/billing-utils.js";
+import {
+  sendWelcomeEmail,
+  sendPaymentReceivedEmail,
+  sendPaymentFailedEmail,
+  sendAccountSuspendedEmail,
+} from "../services/email.js";
+import { config } from "../config.js";
 
 /**
  * Extract subscription ID from an invoice's parent field (Stripe v2025-08-27+).
@@ -202,6 +209,21 @@ async function handleCheckoutCompleted(
     void provisionTenant(tenantId, {
       ownerUserId: userId,
     });
+
+    // Send welcome email
+    const [tenant] = await db
+      .select({ name: tenants.name, billingEmail: tenants.billingEmail })
+      .from(tenants)
+      .where(eq(tenants.id, tenantId))
+      .limit(1);
+    if (tenant?.billingEmail) {
+      void sendWelcomeEmail({
+        to: tenant.billingEmail,
+        userName: session.metadata?.userName ?? "there",
+        companyName: tenant.name,
+        loginUrl: config.frontendUrl,
+      }).catch(() => { /* email failure should not block webhook */ });
+    }
   }
 
   await logBillingEvent({
@@ -293,6 +315,28 @@ async function handleInvoicePaymentSucceeded(
     resourceId: stripeInvoiceId,
     metadata: { tenantId, amountPaid: invoice.amount_paid },
   });
+
+  // Send payment received email
+  const [paymentTenant] = await db
+    .select({ name: tenants.name, billingEmail: tenants.billingEmail })
+    .from(tenants)
+    .where(eq(tenants.id, tenantId))
+    .limit(1);
+  if (paymentTenant?.billingEmail) {
+    void sendPaymentReceivedEmail({
+      to: paymentTenant.billingEmail,
+      companyName: paymentTenant.name,
+      amountCents: invoice.amount_paid,
+      currency: invoice.currency,
+      invoiceUrl: invoice.hosted_invoice_url ?? null,
+      periodStart: invoice.period_start
+        ? new Date(invoice.period_start * 1000).toISOString()
+        : new Date().toISOString(),
+      periodEnd: invoice.period_end
+        ? new Date(invoice.period_end * 1000).toISOString()
+        : new Date().toISOString(),
+    }).catch(() => { /* email failure should not block webhook */ });
+  }
 }
 
 /**
@@ -342,6 +386,23 @@ async function handleInvoicePaymentFailed(
     resourceId: invoice.id,
     metadata: { tenantId, amountDue: invoice.amount_due },
   });
+
+  // Send payment failed email
+  const [failedTenant] = await db
+    .select({ name: tenants.name, billingEmail: tenants.billingEmail })
+    .from(tenants)
+    .where(eq(tenants.id, tenantId))
+    .limit(1);
+  if (failedTenant?.billingEmail) {
+    void sendPaymentFailedEmail({
+      to: failedTenant.billingEmail,
+      companyName: failedTenant.name,
+      amountCents: invoice.amount_due,
+      currency: invoice.currency,
+      retryDate: null,
+      updatePaymentUrl: `${config.frontendUrl}/signup/cancelled`,
+    }).catch(() => { /* email failure should not block webhook */ });
+  }
 }
 
 /**
@@ -416,6 +477,20 @@ async function handleSubscriptionDeleted(
     dispatchWebhook("tenant.cancelled", tenantId, {
       subscriptionId: sub.id,
     });
+
+    // Send account suspended email
+    const [suspendedTenant] = await db
+      .select({ name: tenants.name, billingEmail: tenants.billingEmail })
+      .from(tenants)
+      .where(eq(tenants.id, tenantId))
+      .limit(1);
+    if (suspendedTenant?.billingEmail) {
+      void sendAccountSuspendedEmail({
+        to: suspendedTenant.billingEmail,
+        companyName: suspendedTenant.name,
+        reactivateUrl: `${config.frontendUrl}/signup`,
+      }).catch(() => { /* email failure should not block webhook */ });
+    }
   }
 
   await logBillingEvent({

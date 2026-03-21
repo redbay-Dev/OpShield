@@ -4,12 +4,14 @@ import {
   LayoutDashboard,
   Building2,
   Webhook,
+  ScrollText,
   Menu,
   LogOut,
   Shield,
   ChevronDown,
 } from "lucide-react";
 import { Button } from "@frontend/components/ui/button.js";
+import { Badge } from "@frontend/components/ui/badge.js";
 import { Separator } from "@frontend/components/ui/separator.js";
 import {
   Sheet,
@@ -25,6 +27,7 @@ import {
 } from "@frontend/components/ui/dropdown-menu.js";
 import { cn } from "@frontend/lib/utils.js";
 import { authClient } from "@frontend/lib/auth-client.js";
+import { useAdminPermissions } from "@frontend/hooks/use-admin-permissions.js";
 
 interface NavItem {
   label: string;
@@ -36,9 +39,22 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
   { label: "Tenants", href: "/admin/tenants", icon: Building2 },
   { label: "Webhook Log", href: "/admin/webhook-log", icon: Webhook },
+  { label: "Audit Log", href: "/admin/audit-log", icon: ScrollText },
 ];
 
-function SidebarContent(): React.JSX.Element {
+const ROLE_LABELS: Record<string, string> = {
+  super_admin: "Super Admin",
+  support: "Support",
+  viewer: "Viewer",
+};
+
+const ROLE_VARIANT: Record<string, "default" | "secondary" | "outline"> = {
+  super_admin: "default",
+  support: "secondary",
+  viewer: "outline",
+};
+
+function SidebarContent({ role }: { role: string | null }): React.JSX.Element {
   return (
     <nav className="flex flex-1 flex-col gap-1 p-4">
       <div className="mb-2 flex items-center gap-2 px-2">
@@ -47,6 +63,13 @@ function SidebarContent(): React.JSX.Element {
         </div>
         <span className="text-lg font-semibold">OpShield</span>
       </div>
+      {role && (
+        <div className="mb-2 px-2">
+          <Badge variant={ROLE_VARIANT[role] ?? "outline"} className="text-xs">
+            {ROLE_LABELS[role] ?? role}
+          </Badge>
+        </div>
+      )}
       <Separator className="mb-4" />
       <p className="text-muted-foreground mb-2 px-2 text-xs font-medium uppercase tracking-wider">
         Management
@@ -76,6 +99,7 @@ function SidebarContent(): React.JSX.Element {
 export function DashboardLayout(): React.JSX.Element {
   const [sheetOpen, setSheetOpen] = useState(false);
   const { data: session } = authClient.useSession();
+  const { role } = useAdminPermissions();
   const navigate = useNavigate();
 
   async function handleSignOut(): Promise<void> {
@@ -87,7 +111,7 @@ export function DashboardLayout(): React.JSX.Element {
     <div className="flex min-h-screen">
       {/* Desktop sidebar */}
       <aside className="bg-sidebar border-sidebar-border hidden w-64 flex-col border-r lg:flex">
-        <SidebarContent />
+        <SidebarContent role={role} />
       </aside>
 
       {/* Main content */}
@@ -104,7 +128,7 @@ export function DashboardLayout(): React.JSX.Element {
               </SheetTrigger>
               <SheetContent side="left" className="w-64 p-0">
                 <SheetTitle className="sr-only">Navigation</SheetTitle>
-                <SidebarContent />
+                <SidebarContent role={role} />
               </SheetContent>
             </Sheet>
 

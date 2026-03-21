@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { eq, and } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { tenants, tenantModules, auditLog } from "../db/schema/tenants.js";
-import { requirePlatformAdmin } from "../middleware/require-platform-admin.js";
+import { requirePlatformAdmin, requireWriteAccess, requireDeleteAccess } from "../middleware/require-platform-admin.js";
 import { getSession } from "../middleware/auth.js";
 import {
   addModuleSchema,
@@ -13,6 +13,7 @@ import {
 import { SAFESPEC_MODULES, NEXUM_MODULES } from "@opshield/shared/constants";
 import { dispatchWebhook } from "../services/webhook.js";
 import { provisionTenant } from "../services/provisioning.js";
+import { sendModuleAddedEmail, sendModuleRemovedEmail } from "../services/email.js";
 import { tenantProvisioning } from "../db/schema/tenants.js";
 
 /** All valid module IDs by product */
@@ -38,10 +39,10 @@ function formatModule(
 }
 
 export async function moduleRoutes(app: FastifyInstance): Promise<void> {
-  // ── POST /tenants/:tenantId/modules — Add module to tenant ──
+  // ── POST /tenants/:tenantId/modules — Add module to tenant (write access) ──
   app.post(
     "/tenants/:tenantId/modules",
-    { preHandler: [requirePlatformAdmin] },
+    { preHandler: [requirePlatformAdmin, requireWriteAccess] },
     async (request, reply) => {
       const paramParsed = tenantIdParamSchema.safeParse(request.params);
       if (!paramParsed.success) {
@@ -191,6 +192,23 @@ export async function moduleRoutes(app: FastifyInstance): Promise<void> {
         });
       }
 
+      // Send module added email
+      const [addedTenant] = await db
+        .select({ name: tenants.name, billingEmail: tenants.billingEmail })
+        .from(tenants)
+        .where(eq(tenants.id, tenantId))
+        .limit(1);
+      if (addedTenant?.billingEmail) {
+        const productName = productId === "safespec" ? "SafeSpec" : "Nexum";
+        void sendModuleAddedEmail({
+          to: addedTenant.billingEmail,
+          companyName: addedTenant.name,
+          moduleName: moduleId,
+          productName,
+          loginUrl: productId === "safespec" ? "https://app.safespec.com.au" : "https://app.nexum.com.au",
+        }).catch(() => { /* non-blocking */ });
+      }
+
       return reply.status(201).send({
         success: true,
         data: formatModule(mod),
@@ -198,10 +216,10 @@ export async function moduleRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // ── PATCH /tenants/:tenantId/modules/:moduleId — Update module ──
+  // ── PATCH /tenants/:tenantId/modules/:moduleId — Update module (write access) ──
   app.patch(
     "/tenants/:tenantId/modules/:moduleId",
-    { preHandler: [requirePlatformAdmin] },
+    { preHandler: [requirePlatformAdmin, requireWriteAccess] },
     async (request, reply) => {
       const paramParsed = moduleIdParamSchema.safeParse(request.params);
       if (!paramParsed.success) {
@@ -304,10 +322,10 @@ export async function moduleRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // ── DELETE /tenants/:tenantId/modules/:moduleId — Remove module ──
+  // ── DELETE /tenants/:tenantId/modules/:moduleId — Remove module (delete access) ──
   app.delete(
     "/tenants/:tenantId/modules/:moduleId",
-    { preHandler: [requirePlatformAdmin] },
+    { preHandler: [requirePlatformAdmin, requireDeleteAccess] },
     async (request, reply) => {
       const paramParsed = moduleIdParamSchema.safeParse(request.params);
       if (!paramParsed.success) {
@@ -401,6 +419,23 @@ export async function moduleRoutes(app: FastifyInstance): Promise<void> {
         productId: existing.productId,
         moduleId,
       });
+
+      // Send module removed email
+      const [removedTenant] = await db
+        .select({ name: tenants.name, billingEmail: tenants.billingEmail })
+        .from(tenants)
+        .where(eq(tenants.id, tenantId))
+        .limit(1);
+      if (removedTenant?.billingEmail) {
+        const productName = existing.productId === "safespec" ? "SafeSpec" : "Nexum";
+        void sendModuleRemovedEmail({
+          to: removedTenant.billingEmail,
+          companyName: removedTenant.name,
+          moduleName: moduleId,
+          productName,
+          retentionDays: 90,
+        }).catch(() => { /* non-blocking */ });
+      }
 
       return reply.send({ success: true });
     },

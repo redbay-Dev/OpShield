@@ -6,6 +6,37 @@ import { db } from "./db/client.js";
 import { tenantUsers } from "./db/schema/tenant-users.js";
 import { config } from "./config.js";
 
+const socialProviders: Record<string, unknown>[] = [];
+
+// Register Microsoft SSO only when credentials are configured
+if (config.microsoft.clientId && config.microsoft.clientSecret) {
+  socialProviders.push({
+    id: "microsoft",
+    name: "Microsoft",
+    clientId: config.microsoft.clientId,
+    clientSecret: config.microsoft.clientSecret,
+    authorization: {
+      url: `https://login.microsoftonline.com/${config.microsoft.tenantId}/oauth2/v2.0/authorize`,
+      params: {
+        scope: "openid profile email User.Read",
+        response_type: "code",
+      },
+    },
+    token: {
+      url: `https://login.microsoftonline.com/${config.microsoft.tenantId}/oauth2/v2.0/token`,
+    },
+    userinfo: {
+      url: "https://graph.microsoft.com/v1.0/me",
+    },
+    profile: (profile: Record<string, string>) => ({
+      id: profile.id,
+      name: profile.displayName,
+      email: profile.mail ?? profile.userPrincipalName,
+      image: null,
+    }),
+  });
+}
+
 export const auth = betterAuth({
   basePath: "/api/auth",
   secret: config.auth.secret,
@@ -24,6 +55,13 @@ export const auth = betterAuth({
     enabled: true,
     minPasswordLength: 10,
   },
+
+  socialProviders:
+    socialProviders.length > 0
+      ? Object.fromEntries(
+          socialProviders.map((p) => [(p as { id: string }).id, p]),
+        )
+      : undefined,
 
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days

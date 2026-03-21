@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { eq, and, isNull, ilike, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { tenants, auditLog } from "../db/schema/tenants.js";
-import { requirePlatformAdmin } from "../middleware/require-platform-admin.js";
+import { requirePlatformAdmin, requireWriteAccess } from "../middleware/require-platform-admin.js";
 import { getSession } from "../middleware/auth.js";
 import {
   createTenantSchema,
@@ -25,10 +25,10 @@ function formatTenant(tenant: typeof tenants.$inferSelect): Record<string, unkno
 }
 
 export async function tenantRoutes(app: FastifyInstance): Promise<void> {
-  // ── POST /tenants — Create tenant (platform admin only) ──
+  // ── POST /tenants — Create tenant (write access required) ──
   app.post(
     "/tenants",
-    { preHandler: [requirePlatformAdmin] },
+    { preHandler: [requirePlatformAdmin, requireWriteAccess] },
     async (request, reply) => {
       const parsed = createTenantSchema.safeParse(request.body);
       if (!parsed.success) {
@@ -172,10 +172,10 @@ export async function tenantRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // ── PATCH /tenants/:tenantId — Update tenant (platform admin only) ──
+  // ── PATCH /tenants/:tenantId — Update tenant (write access required) ──
   app.patch(
     "/tenants/:tenantId",
-    { preHandler: [requirePlatformAdmin] },
+    { preHandler: [requirePlatformAdmin, requireWriteAccess] },
     async (request, reply) => {
       const paramParsed = tenantIdParamSchema.safeParse(request.params);
       if (!paramParsed.success) {

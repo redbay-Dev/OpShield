@@ -53,6 +53,7 @@ import {
 } from "@opshield/shared/constants";
 import { BillingTab } from "./billing-tab.js";
 import { ProvisioningTab } from "./provisioning-tab.js";
+import { SsoTab } from "./sso-tab.js";
 
 const STATUS_VARIANT: Record<
   string,
@@ -279,6 +280,7 @@ export function TenantDetailPage(): React.JSX.Element {
           </TabsTrigger>
           <TabsTrigger value="billing">Billing</TabsTrigger>
           <TabsTrigger value="provisioning">Provisioning</TabsTrigger>
+          <TabsTrigger value="sso">SSO</TabsTrigger>
         </TabsList>
 
         <TabsContent value="info" className="space-y-4">
@@ -625,6 +627,9 @@ export function TenantDetailPage(): React.JSX.Element {
 
         <TabsContent value="provisioning">
           <ProvisioningTab tenantId={tenantId ?? ""} />
+        </TabsContent>
+        <TabsContent value="sso">
+          <SsoTab tenantId={tenantId ?? ""} />
         </TabsContent>
       </Tabs>
     </div>

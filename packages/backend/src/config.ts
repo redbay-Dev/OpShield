@@ -34,6 +34,11 @@ export const config = {
     secret: process.env.BETTER_AUTH_SECRET ?? "change-me-in-development",
     url: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
   },
+  microsoft: {
+    clientId: process.env.MICROSOFT_CLIENT_ID ?? "",
+    clientSecret: process.env.MICROSOFT_CLIENT_SECRET ?? "",
+    tenantId: process.env.MICROSOFT_TENANT_ID ?? "common",
+  },
   smtp: {
     host: process.env.SMTP_HOST ?? "localhost",
     port: Number(process.env.SMTP_PORT ?? 1025),

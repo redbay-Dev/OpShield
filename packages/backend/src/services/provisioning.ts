@@ -7,6 +7,8 @@ import {
   auditLog,
 } from "../db/schema/tenants.js";
 import { sendProvisioningWebhook } from "./webhook.js";
+import { sendProvisioningFailedEmail } from "./email.js";
+import { config } from "../config.js";
 
 type ProductId = "nexum" | "safespec";
 
@@ -268,4 +270,21 @@ export async function handleProvisioningCallback(
     resourceId: tenantId,
     metadata: { productId, error: error ?? null },
   });
+
+  // Send provisioning failed email to admin
+  if (!success) {
+    const [tenant] = await db
+      .select({ name: tenants.name })
+      .from(tenants)
+      .where(eq(tenants.id, tenantId))
+      .limit(1);
+
+    void sendProvisioningFailedEmail({
+      to: config.smtp.from,
+      tenantName: tenant?.name ?? tenantId,
+      productId,
+      error: error ?? "Unknown error",
+      adminUrl: `${config.frontendUrl}/admin/tenants/${tenantId}`,
+    }).catch(() => { /* non-blocking */ });
+  }
 }

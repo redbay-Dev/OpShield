@@ -3,7 +3,7 @@ import { randomBytes, createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { serviceApiKeys } from "../db/schema/tenants.js";
-import { requirePlatformAdmin } from "../middleware/require-platform-admin.js";
+import { requirePlatformAdmin, requireWriteAccess, requireDeleteAccess } from "../middleware/require-platform-admin.js";
 import { createServiceKeySchema } from "@opshield/shared/schemas";
 
 interface AdminRequest extends FastifyRequest {
@@ -15,7 +15,7 @@ export async function serviceKeyRoutes(app: FastifyInstance): Promise<void> {
   // Generate a new service API key for a product. Returns the raw key ONCE.
   app.post(
     "/service-keys",
-    { preHandler: [requirePlatformAdmin] },
+    { preHandler: [requirePlatformAdmin, requireWriteAccess] },
     async (request, reply) => {
       const parsed = createServiceKeySchema.safeParse(request.body);
       if (!parsed.success) {
@@ -97,10 +97,10 @@ export async function serviceKeyRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // ── DELETE /service-keys/:keyId ──
-  // Revoke a service API key (soft delete — sets status to "revoked").
+  // Revoke a service API key (super_admin only).
   app.delete(
     "/service-keys/:keyId",
-    { preHandler: [requirePlatformAdmin] },
+    { preHandler: [requirePlatformAdmin, requireDeleteAccess] },
     async (request, reply) => {
       const { keyId } = request.params as { keyId: string };
 

@@ -7,7 +7,7 @@ import {
   subscriptionItems,
   plans,
 } from "../db/schema/billing.js";
-import { requirePlatformAdmin } from "../middleware/require-platform-admin.js";
+import { requirePlatformAdmin, requireWriteAccess, requireDeleteAccess } from "../middleware/require-platform-admin.js";
 import { getSession } from "../middleware/auth.js";
 import {
   createSubscriptionSchema,
@@ -48,10 +48,10 @@ function formatSubscription(
 }
 
 export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
-  // ── POST /tenants/:tenantId/subscription — Create subscription ──
+  // ── POST /tenants/:tenantId/subscription — Create subscription (write access) ──
   app.post(
     "/tenants/:tenantId/subscription",
-    { preHandler: [requirePlatformAdmin] },
+    { preHandler: [requirePlatformAdmin, requireWriteAccess] },
     async (request, reply) => {
       const paramParsed = tenantIdParamSchema.safeParse(request.params);
       if (!paramParsed.success) {
@@ -356,10 +356,10 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // ── PATCH /tenants/:tenantId/subscription — Update subscription ──
+  // ── PATCH /tenants/:tenantId/subscription — Update subscription (write access) ──
   app.patch(
     "/tenants/:tenantId/subscription",
-    { preHandler: [requirePlatformAdmin] },
+    { preHandler: [requirePlatformAdmin, requireWriteAccess] },
     async (request, reply) => {
       const paramParsed = tenantIdParamSchema.safeParse(request.params);
       if (!paramParsed.success) {
@@ -535,10 +535,10 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // ── DELETE /tenants/:tenantId/subscription — Cancel at period end ──
+  // ── DELETE /tenants/:tenantId/subscription — Cancel at period end (delete access) ──
   app.delete(
     "/tenants/:tenantId/subscription",
-    { preHandler: [requirePlatformAdmin] },
+    { preHandler: [requirePlatformAdmin, requireDeleteAccess] },
     async (request, reply) => {
       const paramParsed = tenantIdParamSchema.safeParse(request.params);
       if (!paramParsed.success) {

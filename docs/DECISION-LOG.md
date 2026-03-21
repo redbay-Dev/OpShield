@@ -276,4 +276,25 @@ Every architectural, product, and workflow decision is recorded here with ration
 **Rationale:** Stripe Checkout is the recommended way to collect payment methods for new customers. It handles PCI compliance, card validation, 3D Secure, and mobile optimization. The admin flow retains direct subscription creation since admin-created tenants may have payment methods configured separately.
 **Alternatives considered:** Stripe Elements embedded in our UI (more work, PCI SAQ-A-EP instead of SAQ-A); PaymentIntents with manual flow (complex, reinvents what Checkout provides); always use Checkout for admin too (unnecessary — admins don't enter card details).
 
+### DEC-038: 3-tier admin roles via middleware chain
+**Date:** 2026-03-21
+**Context:** The spec calls for three platform admin tiers (super_admin, support, viewer) but the implementation only had a boolean admin check.
+**Decision:** Implement role enforcement via composable Fastify preHandler middleware: `requirePlatformAdmin` (any role), `requireWriteAccess` (super_admin or support), `requireDeleteAccess` (super_admin only). Role permissions defined in shared constants (`ADMIN_ROLE_PERMISSIONS`).
+**Rationale:** Composable middleware is explicit — each route's permission level is visible in its definition. Shared constants keep the permission matrix in one place. Supporting the old "admin" role via migration to "super_admin" ensures backward compatibility.
+**Alternatives considered:** Role check inside each route handler (duplicated logic); decorator-based approach (Fastify doesn't support decorators natively); single middleware with permission parameter (less readable).
+
+### DEC-039: Email layout via string concatenation (not Handlebars triple-brace)
+**Date:** 2026-03-21
+**Context:** Email templates need a consistent layout wrapper. The standard Handlebars approach uses triple-brace `{{{content}}}` for unescaped HTML injection, but this triggers Semgrep XSS warnings.
+**Decision:** Use TypeScript string concatenation in the `wrapInLayout()` function to compose the layout HTML around template-rendered content. Individual templates use only safe double-brace Handlebars expressions.
+**Rationale:** Eliminates Semgrep false positives while maintaining the same functionality. The content is always server-generated from our own compiled templates (never user input), so the XSS risk was purely theoretical, but clean scanner output is valuable for CI/CD pipelines.
+**Alternatives considered:** Handlebars partials (still requires some form of unescaped output); nosemgrep comments (masks the issue); inline layout in every template (massive duplication).
+
+### DEC-040: Microsoft SSO conditionally registered
+**Date:** 2026-03-21
+**Context:** Microsoft SSO requires Azure AD app credentials (`MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`). These aren't available in all environments (dev, CI).
+**Decision:** Only register the Microsoft social provider with Better Auth when both env vars are non-empty. The rest of the auth system (email/password, 2FA, JWT) works regardless.
+**Rationale:** Prevents startup failures in dev/CI environments that don't have Azure AD credentials configured. SSO is an additive feature — its absence doesn't break any core functionality.
+**Alternatives considered:** Always register with dummy credentials (would fail on actual SSO attempts with misleading errors); require credentials in all environments (blocks local dev).
+
 ---

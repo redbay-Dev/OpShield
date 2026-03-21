@@ -17,14 +17,17 @@ export async function meRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const [admin] = await db
-      .select({ userId: platformAdmins.userId })
+      .select({ userId: platformAdmins.userId, role: platformAdmins.role })
       .from(platformAdmins)
       .where(eq(platformAdmins.userId, session.user.id))
       .limit(1);
 
     return {
       success: true,
-      data: { isPlatformAdmin: Boolean(admin) },
+      data: {
+        isPlatformAdmin: Boolean(admin),
+        role: admin?.role ?? null,
+      },
     };
   });
 }

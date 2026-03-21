@@ -66,6 +66,27 @@ export const BILLING_INTERVALS = {
   ANNUAL: "annual",
 } as const;
 
+/** Platform admin roles */
+export const ADMIN_ROLES = {
+  SUPER_ADMIN: "super_admin",
+  SUPPORT: "support",
+  VIEWER: "viewer",
+} as const;
+
+export type AdminRole = (typeof ADMIN_ROLES)[keyof typeof ADMIN_ROLES];
+
+/**
+ * Role permission matrix.
+ * super_admin: full access
+ * support: read + create + modify (no delete, no destructive actions)
+ * viewer: read-only
+ */
+export const ADMIN_ROLE_PERMISSIONS = {
+  super_admin: { read: true, create: true, update: true, delete: true },
+  support: { read: true, create: true, update: true, delete: false },
+  viewer: { read: true, create: false, update: false, delete: false },
+} as const;
+
 /** Stripe coupon IDs for bundle discounts */
 export const STRIPE_COUPONS = {
   BUNDLE_10_PERCENT: "bundle_10_percent",

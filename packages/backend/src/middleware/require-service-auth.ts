@@ -4,6 +4,8 @@ import { eq, and } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { platformAdmins, serviceApiKeys } from "../db/schema/tenants.js";
 import { getSession } from "./auth.js";
+import type { PlatformAdminAuth } from "./require-platform-admin.js";
+import type { AdminRole } from "@opshield/shared/constants";
 
 /** Shape attached to request when authenticated via service API key */
 export interface ServiceKeyAuth {
@@ -111,6 +113,11 @@ async function authenticateWithSession(
     return;
   }
 
-  (request as FastifyRequest & { platformAdmin: typeof admin }).platformAdmin =
-    admin;
+  const platformAdmin: PlatformAdminAuth = {
+    id: admin.id,
+    userId: admin.userId,
+    role: admin.role as AdminRole,
+  };
+  (request as FastifyRequest & { platformAdmin: PlatformAdminAuth }).platformAdmin =
+    platformAdmin;
 }

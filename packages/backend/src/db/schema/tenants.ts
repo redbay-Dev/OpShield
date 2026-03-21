@@ -81,7 +81,7 @@ export const tenantSsoProviders = pgTable("tenant_sso_providers", {
 export const platformAdmins = pgTable("platform_admins", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: text("user_id").notNull().unique(),
-  role: varchar("role", { length: 50 }).notNull().default("admin"),
+  role: varchar("role", { length: 50 }).notNull().default("viewer"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

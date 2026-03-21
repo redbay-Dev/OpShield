@@ -2,6 +2,63 @@
 
 All notable changes to OpShield are documented here.
 
+## [Unreleased] — Phase 11: Half-Built Feature Completion
+
+### Added
+
+#### 3-Tier Platform Admin Roles
+- **Role-based access control**: Platform admins now have one of three roles — `super_admin` (full access), `support` (read + create + modify, no delete), `viewer` (read-only)
+- **`requireWriteAccess` middleware**: Guards POST/PATCH routes — viewers get 403
+- **`requireDeleteAccess` middleware**: Guards DELETE routes — only super_admin can delete
+- **Role-aware routes**: Tenant CRUD, module management, subscription management, service key management, SSO provider management all enforce role-based permissions
+- **Admin status API enriched**: `GET /me/admin-status` now returns `role` alongside `isPlatformAdmin`
+- **Frontend role display**: Admin sidebar shows role badge (Super Admin / Support / Viewer)
+- **`useAdminPermissions` hook**: Frontend permission checks for conditional UI rendering
+- **DB migration**: `0005_admin_roles.sql` — migrates existing `admin` role to `super_admin`, changes default to `viewer`
+
+#### Audit Log Read API + Admin UI
+- **`GET /api/v1/audit-log`**: Paginated audit log endpoint with filters for `action`, `resourceType`, `actorId`, `resourceId`, `from`, `to` date range
+- **Audit Log admin page** (`/admin/audit-log`): Filterable table showing all platform actions with action badges, resource type, actor, metadata preview, and timestamps
+- **Navigation**: Audit Log added to admin sidebar
+- **Shared schemas**: `auditLogQuerySchema`, `auditLogResponseSchema`
+
+#### Email/Notifications Service
+- **SMTP service** (`services/email.ts`): Nodemailer transport with MailHog for dev, SMTP2GO for prod
+- **Handlebars template engine**: 8 email templates with consistent branded layout
+- **Templates**: `welcome`, `payment-received`, `payment-failed`, `account-suspended`, `module-added`, `module-removed`, `plan-changed`, `provisioning-failed`
+- **Automatic email dispatch**: Wired into Stripe webhook handlers (payment received, payment failed, account suspended), module routes (module added/removed), provisioning callbacks (failure alert), and checkout completion (welcome email)
+- **Non-blocking**: All email sends are fire-and-forget — email failures never block API responses
+- **Template helpers**: `{{formatCurrency}}` (cents→dollars), `{{formatDate}}` (ISO→AU locale), `{{year}}`
+
+#### Microsoft SSO + Per-Tenant Azure AD
+- **Better Auth Microsoft social provider**: Global Microsoft SSO via Azure AD, enabled when `MICROSOFT_CLIENT_ID` and `MICROSOFT_CLIENT_SECRET` env vars are set
+- **Per-tenant SSO configuration**: Admin UI to configure per-tenant Azure AD app registrations with client ID, client secret, Azure tenant ID, and SSO enforcement flag
+- **SSO provider routes**: `GET/PUT/DELETE /api/v1/tenants/:tenantId/sso-providers` — full CRUD for per-tenant SSO providers with audit logging
+- **Domain-based SSO discovery**: `GET /api/v1/sso/discover?email=user@domain.com` — checks if the email domain has enforced SSO (for login flow routing)
+- **SSO tab in tenant detail**: New "SSO" tab on tenant admin page showing current provider config, edit dialog, and remove button (role-aware)
+- **Config**: `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, `MICROSOFT_TENANT_ID` env vars added
+- **Shared schemas**: `upsertSsoProviderSchema`, `ssoProviderResponseSchema`
+
+#### Integration Tests
+- **Email template tests**: All 8 templates compile, render with correct variables, no XSS-prone triple-brace usage
+- **Billing utils tests**: Bundle coupon logic (10% for 2 products, 15% for 3+ modules)
+- **Comprehensive schema validation tests**: 40+ tests covering all Zod schemas — tenant CRUD, module management, subscriptions, usage reports, provisioning callbacks, audit log queries, SSO providers, param schemas, webhook delivery queries
+- **Admin role permission tests**: Verify role matrix (super_admin/support/viewer capabilities)
+- **SSO route tests**: Auth guards, discovery endpoint (400 on bad input, ssoRequired=false for unknown domain)
+- **Audit log route tests**: Auth guards, query parameter acceptance
+- **All 182 tests passing across 24 test files (4 packages)**
+
+### Decisions
+- DEC-038: 3-tier admin roles (super_admin/support/viewer) enforced via middleware chain, not role column on routes
+- DEC-039: Email layout via TypeScript string concatenation (not Handlebars triple-brace) to avoid XSS scanner false positives
+- DEC-040: Microsoft SSO conditionally registered — only when env vars are configured, preventing startup failures in dev
+
+### Next Steps (Priority Order)
+1. **Support Hub** (docs/06) — DB schema (tickets, messages), API routes, email processing, admin UI
+2. **Tenant Self-Service Portal** — Account settings, billing management for end users
+3. **Advanced Platform Admin** — Impersonation, analytics dashboard, feature flags
+4. **E2E tests** — Playwright tests for sign-up flow, admin dashboard, SSO
+
 ## [Unreleased] — Phase 10: Public Website & Self-Service Sign-Up
 
 ### Added

@@ -326,3 +326,60 @@ export const publicPlanResponseSchema = z.object({
 });
 
 export type PublicPlanResponse = z.infer<typeof publicPlanResponseSchema>;
+
+// ── Audit Log Schemas ───────────────────────────────────────────────
+
+/** Query params for listing audit log entries */
+export const auditLogQuerySchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  action: z.string().optional(),
+  resourceType: z.string().optional(),
+  actorId: z.string().optional(),
+  resourceId: z.string().optional(),
+  from: z.string().datetime().optional(),
+  to: z.string().datetime().optional(),
+});
+
+export type AuditLogQuery = z.infer<typeof auditLogQuerySchema>;
+
+/** Audit log entry response */
+export const auditLogResponseSchema = z.object({
+  id: z.string().uuid(),
+  actorId: z.string(),
+  actorType: z.string(),
+  action: z.string(),
+  resourceType: z.string(),
+  resourceId: z.string().nullable(),
+  metadata: z.record(z.string(), z.unknown()),
+  createdAt: z.string(),
+});
+
+export type AuditLogResponse = z.infer<typeof auditLogResponseSchema>;
+
+// ── SSO Provider Schemas ────────────────────────────────────────────
+
+/** Create/update SSO provider for a tenant */
+export const upsertSsoProviderSchema = z.object({
+  provider: z.literal("microsoft"),
+  clientId: z.string().min(1).max(255),
+  clientSecret: z.string().min(1),
+  tenantIdAzure: z.string().min(1).max(255),
+  enforced: z.boolean().default(false),
+});
+
+export type UpsertSsoProviderInput = z.infer<typeof upsertSsoProviderSchema>;
+
+/** SSO provider response (client secret masked) */
+export const ssoProviderResponseSchema = z.object({
+  id: z.string().uuid(),
+  tenantId: z.string().uuid(),
+  provider: z.string(),
+  clientId: z.string(),
+  tenantIdAzure: z.string().nullable(),
+  enforced: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export type SsoProviderResponse = z.infer<typeof ssoProviderResponseSchema>;

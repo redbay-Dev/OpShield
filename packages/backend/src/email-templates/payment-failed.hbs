@@ -1,0 +1,18 @@
+<p>Hi there,</p>
+
+<p>We were unable to process your payment for <strong>{{companyName}}</strong>.</p>
+
+<div class="highlight">
+  <p style="margin: 0;"><strong>Amount:</strong> {{formatCurrency amountCents}} {{currency}}</p>
+  {{#if retryDate}}
+  <p style="margin: 4px 0 0;"><strong>Next retry:</strong> {{formatDate retryDate}}</p>
+  {{/if}}
+</div>
+
+<p>Please update your payment method to avoid any interruption to your service. If payment continues to fail, your account may be suspended after a 7-day grace period.</p>
+
+<p style="text-align: center; margin: 24px 0;">
+  <a href="{{updatePaymentUrl}}" class="btn btn-destructive">Update payment method</a>
+</p>
+
+<p>If you believe this is an error, please contact your bank or reach out to our support team.</p>
