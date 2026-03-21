@@ -26,25 +26,30 @@ export function LoginPage(): React.JSX.Element {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const from = (location.state as { from?: string } | null)?.from ?? "/admin";
+  const from = (location.state as { from?: string } | null)?.from ?? "/account";
 
   async function handleSubmit(e: FormEvent): Promise<void> {
     e.preventDefault();
     setError("");
     setLoading(true);
 
-    await authClient.signIn.email(
+    const result = await authClient.signIn.email(
       { email, password },
       {
-        onSuccess: () => {
-          void navigate(from, { replace: true });
-        },
         onError: (ctx) => {
           setError(ctx.error.message ?? "Sign in failed");
           setLoading(false);
         },
       },
     );
+
+    if (result.error) {
+      setError(result.error.message ?? "Sign in failed");
+      setLoading(false);
+      return;
+    }
+
+    void navigate(from, { replace: true });
   }
 
   return (
@@ -86,7 +91,6 @@ export function LoginPage(): React.JSX.Element {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   autoComplete="current-password"
-                  minLength={10}
                 />
               </Field>
               <Field>

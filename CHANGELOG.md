@@ -2,6 +2,62 @@
 
 All notable changes to OpShield are documented here.
 
+## [Unreleased] — Phase 15: Auth Fixes, Branding, Plans, Production Readiness
+
+### Fixed
+
+#### Critical Auth Bug: Session Cookies Dropped
+- **`sendAuthResponse()` in `app.ts`**: Better Auth sets multiple `set-cookie` headers (session token + session data). The response forwarder stored headers in a `Record<string, string>` which silently overwrote duplicate keys — only the last `set-cookie` survived. Changed to collect cookies into a `string[]` so all cookies are forwarded. This was the root cause of sign-in appearing to do nothing.
+
+#### Login Flow Fixes
+- **Default redirect**: Sign-in now redirects to `/account` (not `/admin`) — non-admin users were silently bounced back to login
+- **Error handling**: Sign-in result is checked for errors before navigating, so failures are shown to the user
+- **Password minLength removed from login**: Login form had `minLength={10}` on the password field which is a sign-up concern, not a login concern
+
+#### First-User Admin Promotion
+- **Better Auth `databaseHooks.user.create.after`**: First user to sign up is automatically promoted to `super_admin` — no env vars, no migrations, no hardcoded emails. Only fires when `platform_admins` table is empty.
+- **Server startup check**: On boot, if zero admins exist and exactly one user is in the system, that user is promoted. Handles the case where a user already signed up before this logic was added. Permanent no-op once any admin exists.
+
+### Added
+
+#### Plan Management API
+- **`GET /api/v1/plans/admin`**: List all plans (platform admin, read access)
+- **`POST /api/v1/plans`**: Create plan (write access, audit logged)
+- **`PATCH /api/v1/plans/:planId`**: Update plan pricing/features (write access, audit logged)
+- **`DELETE /api/v1/plans/:planId`**: Soft-deactivate plan (delete access, audit logged)
+
+#### Plans Data Migration
+- **Migration `0009_plans_data.sql`**: Inserts all pricing plans from `docs/04-BILLING-PRICING-MODEL.md` — SafeSpec WHS (3 tiers), HVA (3 tiers), Fleet Maintenance, Nexum Core (2 tiers), 11 optional module add-ons
+
+#### Auto-Migration on Startup
+- **`server.ts`**: Runs `drizzle-orm/postgres-js/migrator` before accepting requests — no manual `pnpm db:migrate` needed
+
+#### Branding: Redbay → Nexum
+- All customer-facing strings replaced: emails, templates, UI, layouts, footer, auth pages
+- `redbay.com.au` → `nexum.net.au` across all email addresses
+- `x-redbay-*` inbound email headers → `x-nexum-*`
+- Auth issuer: `Redbay` → `Nexum`
+- SMTP from default: `noreply@nexum.net.au`
+
+### Removed
+- **Seed script** (`db/seed.ts`): Deleted. Plans are now in migration 0009. No test data.
+- **`db:seed` script** from package.json
+
+### Decisions
+- DEC-054: First user to sign up becomes super_admin — standard SaaS pattern, no deployment config needed
+- DEC-055: Nexum is the unified customer-facing brand — one brand, modules underneath (Operations + Compliance). OpShield is internal only. SafeSpec name retired.
+- DEC-056: Plans inserted via SQL migration, not seed script — reference data belongs in migrations
+
+### Known Issues (MUST FIX)
+- **2FA is not enforced**: Sign-up does not redirect to 2FA setup. Sign-in does not require 2FA verification. The spec says 2FA is mandatory — this needs to be fixed.
+- **Sign-up flow incomplete**: Account creation works but does not flow into 2FA setup → company selection → checkout
+
+### Next Steps (Priority Order)
+1. **Enforce mandatory 2FA**: Sign-up must redirect to 2FA setup. Sign-in must require 2FA verification if enabled. Users without 2FA must be forced to set it up before accessing any protected route.
+2. **Fix sign-up → 2FA → company → checkout flow**: The full self-service onboarding wizard needs end-to-end testing and fixing.
+3. **Run `pnpm stripe:sync`** after Stripe keys are configured to create Stripe products/prices from plan data.
+4. **Auth Migration Phase 2**: Products consume OpShield JWTs (cross-project work).
+
 ## [Unreleased] — Phase 14: Support Hub
 
 ### Added

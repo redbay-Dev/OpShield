@@ -386,6 +386,27 @@ Every architectural, product, and workflow decision is recorded here with ration
 **Context:** Email replies need to be threaded back to the correct ticket. Email providers forward parsed emails but threading metadata varies by provider.
 **Decision:** Primary threading: parse `[T-XXX]` from subject line. Deduplication: check `emailMessageId` to prevent duplicate messages from provider retries. Fallback for new tickets without tenant headers: look up sender's existing tickets to resolve tenant.
 **Rationale:** Subject line pattern is universal across all email clients and providers. Message ID dedup is essential since webhook providers may retry on timeout.
-**Alternatives considered:** Use Reply-To plus-addressing only (requires DNS setup for `support+T-089@redbay.com.au`); In-Reply-To header matching (not all providers forward this).
+**Alternatives considered:** Use Reply-To plus-addressing only (requires DNS setup for `support+T-089@nexum.net.au`); In-Reply-To header matching (not all providers forward this).
+
+### DEC-054: First sign-up user becomes super_admin
+**Date:** 2026-03-21
+**Context:** Fresh installs need an initial platform admin. Options: hardcoded email in migration (breaks production), env var (deployment hack), bootstrap API endpoint (security hole), or automatic first-user promotion.
+**Decision:** Better Auth `databaseHooks.user.create.after` hook checks if `platform_admins` is empty — if so, promotes the new user to `super_admin`. Server startup also checks: if zero admins and exactly one user, promotes them (handles existing users from before this logic was added).
+**Rationale:** Standard SaaS pattern. No deployment configuration needed. Safe — only fires when zero admins exist. After the first admin is created, subsequent users are normal users. Additional admins are added through the admin dashboard.
+**Alternatives considered:** Env var `INITIAL_ADMIN_EMAIL` (deployment hack, easy to forget); hardcoded email in migration (breaks on production deploy); bootstrap API endpoint (security hole in production).
+
+### DEC-055: Nexum is the unified customer-facing brand
+**Date:** 2026-03-21
+**Context:** Three codebases (OpShield, Nexum, SafeSpec) but customers should see one brand. "Redbay" was a placeholder company name with no business registration.
+**Decision:** Everything is Nexum. Domain: nexum.net.au (owned). Modules: Nexum Operations + Nexum Compliance. OpShield remains an internal codename for the platform layer. SafeSpec name retired. No "Redbay" anywhere customer-facing.
+**Rationale:** One brand is simpler to market — "We use Nexum." No confusion about three product names. The codebase names (package names, repo names) stay as-is for now — renaming is a separate task.
+**Alternatives considered:** Keep three brands (confusing); rename codebases (too much churn for no user benefit right now).
+
+### DEC-056: Plans as migration data, not seed data
+**Date:** 2026-03-21
+**Context:** Pricing plans are required for the app to function (pricing page, signup, billing). Previously in a seed script that was deleted. Plans are reference/configuration data, not test data.
+**Decision:** Insert all plans via SQL migration `0009_plans_data.sql` with `ON CONFLICT DO NOTHING`. Added plan management API for runtime updates.
+**Rationale:** Migrations run automatically on startup. Plans exist immediately in any environment. `ON CONFLICT DO NOTHING` makes it idempotent. Admin API allows price changes without new migrations.
+**Alternatives considered:** Seed script (deleted per no-seed-data rule); admin-only creation (requires admin to exist first, chicken-and-egg).
 
 ---

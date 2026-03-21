@@ -122,13 +122,22 @@ async function sendAuthResponse(
   reply.hijack();
   const socket = reply.raw;
 
-  // Collect validated headers
-  const outHeaders: Record<string, string> = {};
+  // Collect validated headers — set-cookie needs special handling
+  // because there can be multiple values
+  const outHeaders: Record<string, string | string[]> = {};
+  const cookies: string[] = [];
+
   response.headers.forEach((value, key) => {
-    if (SAFE_AUTH_HEADERS.has(key)) {
+    if (key === "set-cookie") {
+      cookies.push(value);
+    } else if (SAFE_AUTH_HEADERS.has(key)) {
       outHeaders[key] = value;
     }
   });
+
+  if (cookies.length > 0) {
+    outHeaders["set-cookie"] = cookies;
+  }
 
   // Validate redirect location against allowlist
   const locationValue = response.headers.get("location");
