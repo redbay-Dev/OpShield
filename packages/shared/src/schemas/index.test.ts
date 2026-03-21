@@ -544,7 +544,7 @@ describe("inboundEmailPayloadSchema", () => {
   it("accepts valid email payload", () => {
     const result = inboundEmailPayloadSchema.safeParse({
       from: "Jane Smith <jane@bridgeco.com.au>",
-      to: "support@redbay.com.au",
+      to: "support@nexum.net.au",
       subject: "SWMS PDF not generating",
       textBody: "When I click generate PDF it fails",
     });
@@ -554,13 +554,13 @@ describe("inboundEmailPayloadSchema", () => {
   it("accepts payload with custom headers", () => {
     const result = inboundEmailPayloadSchema.safeParse({
       from: "jane@bridgeco.com.au",
-      to: "support@redbay.com.au",
+      to: "support@nexum.net.au",
       subject: "Help",
       textBody: "Need help",
       headers: {
-        "x-redbay-product": "safespec",
-        "x-redbay-tenant-id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-        "x-redbay-category": "bug_report",
+        "x-nexum-product": "safespec",
+        "x-nexum-tenant-id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        "x-nexum-category": "bug_report",
       },
     });
     expect(result.success).toBe(true);
@@ -569,7 +569,7 @@ describe("inboundEmailPayloadSchema", () => {
   it("applies default empty textBody", () => {
     const result = inboundEmailPayloadSchema.safeParse({
       from: "user@test.com",
-      to: "support@redbay.com.au",
+      to: "support@nexum.net.au",
       subject: "Test",
     });
     expect(result.success).toBe(true);
@@ -580,7 +580,7 @@ describe("inboundEmailPayloadSchema", () => {
 
   it("rejects missing from", () => {
     const result = inboundEmailPayloadSchema.safeParse({
-      to: "support@redbay.com.au",
+      to: "support@nexum.net.au",
       subject: "Test",
     });
     expect(result.success).toBe(false);
@@ -589,7 +589,7 @@ describe("inboundEmailPayloadSchema", () => {
   it("rejects missing subject", () => {
     const result = inboundEmailPayloadSchema.safeParse({
       from: "user@test.com",
-      to: "support@redbay.com.au",
+      to: "support@nexum.net.au",
     });
     expect(result.success).toBe(false);
   });

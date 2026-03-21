@@ -1,4 +1,4 @@
-/** Products in the Redbay suite */
+/** Products in the Nexum suite */
 export const PRODUCTS = {
   NEXUM: "nexum",
   SAFESPEC: "safespec",

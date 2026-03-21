@@ -11,7 +11,7 @@ import {
 import { tenants } from "./tenants.js";
 
 /**
- * Support tickets — centralized ticketing for all Redbay products.
+ * Support tickets — centralized ticketing for all Nexum products.
  * Tickets are created via API from product backends or directly by admins.
  */
 export const supportTickets = pgTable("support_tickets", {

@@ -45,7 +45,7 @@ export const config = {
     secure: process.env.SMTP_SECURE === "true",
     user: process.env.SMTP_USER ?? "",
     password: process.env.SMTP_PASSWORD ?? "",
-    from: process.env.SMTP_FROM ?? "noreply@redbay.com.au",
+    from: process.env.SMTP_FROM ?? "noreply@nexum.net.au",
   },
   stripe: {
     secretKey: process.env.STRIPE_SECRET_KEY ?? "",

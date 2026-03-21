@@ -19,7 +19,7 @@ export function CheckoutSuccessPage(): React.JSX.Element {
         <div className="mx-auto mb-2 flex size-12 items-center justify-center rounded-full bg-green-100">
           <CheckCircle className="size-6 text-green-700" />
         </div>
-        <CardTitle className="text-xl">Welcome to Redbay!</CardTitle>
+        <CardTitle className="text-xl">Welcome to Nexum!</CardTitle>
         <CardDescription>
           Your account has been set up successfully. Your workspace is being provisioned now.
         </CardDescription>

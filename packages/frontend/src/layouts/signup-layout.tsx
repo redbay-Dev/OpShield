@@ -63,7 +63,7 @@ export function SignupLayout(): React.JSX.Element {
               <div className="flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
                 <Shield className="size-4" />
               </div>
-              <span>Redbay</span>
+              <span>Nexum</span>
             </Link>
           </div>
         </header>

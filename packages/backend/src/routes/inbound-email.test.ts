@@ -48,7 +48,7 @@ describe("inbound email webhook routes", () => {
         url: "/api/webhooks/inbound-email",
         payload: {
           from: "unknown-user-12345@example.com",
-          to: "support@redbay.com.au",
+          to: "support@nexum.net.au",
           subject: "Help needed",
           textBody: "I need help with something",
         },
@@ -64,7 +64,7 @@ describe("inbound email webhook routes", () => {
         url: "/api/webhooks/inbound-email",
         payload: {
           from: "user@example.com",
-          to: "support@redbay.com.au",
+          to: "support@nexum.net.au",
           subject: "Re: [T-99999] Some old ticket",
           textBody: "Following up on this",
         },
@@ -80,15 +80,15 @@ describe("inbound email webhook routes", () => {
         url: "/api/webhooks/inbound-email",
         payload: {
           from: "Jane Smith <jane@bridgeco.com.au>",
-          to: "support@redbay.com.au",
+          to: "support@nexum.net.au",
           subject: "SWMS PDF not generating",
           textBody: "When I click generate PDF it fails",
           headers: {
-            "x-redbay-product": "safespec",
-            "x-redbay-tenant-id": "00000000-0000-0000-0000-000000000001",
-            "x-redbay-user-id": "user-123",
-            "x-redbay-category": "bug_report",
-            "x-redbay-page": "/swms/456/edit",
+            "x-nexum-product": "safespec",
+            "x-nexum-tenant-id": "00000000-0000-0000-0000-000000000001",
+            "x-nexum-user-id": "user-123",
+            "x-nexum-category": "bug_report",
+            "x-nexum-page": "/swms/456/edit",
           },
         },
       });

@@ -42,7 +42,7 @@ export function PublicLayout(): React.JSX.Element {
               <div className="flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
                 <Shield className="size-4" />
               </div>
-              <span>Redbay</span>
+              <span>Nexum</span>
             </Link>
             <nav className="hidden items-center gap-6 md:flex">
               <NavItems />
@@ -109,7 +109,7 @@ export function PublicLayout(): React.JSX.Element {
           <div className="flex flex-col items-center justify-between gap-4 sm:flex-row">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Shield className="size-4" />
-              <span>&copy; {new Date().getFullYear()} Redbay Development Pty Ltd</span>
+              <span>&copy; {new Date().getFullYear()} Nexum Pty Ltd</span>
             </div>
             <div className="flex gap-6 text-sm text-muted-foreground">
               <Link to="/pricing" className="hover:text-foreground">Pricing</Link>

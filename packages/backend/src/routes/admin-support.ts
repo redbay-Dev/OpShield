@@ -271,7 +271,7 @@ export async function adminSupportRoutes(
           senderType: "admin",
           senderId: admin.userId,
           senderName: adminName,
-          senderEmail: "support@redbay.com.au",
+          senderEmail: "support@nexum.net.au",
           body: messageBody,
           isInternalNote,
         })

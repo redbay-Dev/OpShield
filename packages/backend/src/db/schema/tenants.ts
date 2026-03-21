@@ -10,7 +10,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 /**
- * Tenant registry — one row per paying customer across all Redbay products.
+ * Tenant registry — one row per paying customer across all Nexum products.
  * OpShield uses a flat schema (no multi-tenancy). This IS the tenant registry.
  */
 export const tenants = pgTable("tenants", {
@@ -75,7 +75,7 @@ export const tenantSsoProviders = pgTable("tenant_sso_providers", {
 });
 
 /**
- * Platform admin users (Redbay staff).
+ * Platform admin users (Platform staff).
  * Separate from tenant users — these manage the platform itself.
  */
 export const platformAdmins = pgTable("platform_admins", {

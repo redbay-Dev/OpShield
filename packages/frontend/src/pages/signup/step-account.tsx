@@ -56,7 +56,7 @@ export function StepAccountPage(): React.JSX.Element {
       <CardHeader className="text-center">
         <CardTitle className="text-xl">Create your account</CardTitle>
         <CardDescription>
-          Get started with Redbay in minutes
+          Get started with Nexum in minutes
         </CardDescription>
       </CardHeader>
       <CardContent>

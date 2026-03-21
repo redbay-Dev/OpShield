@@ -1,5 +1,5 @@
 -- Support Hub tables
--- Centralized ticketing for all Redbay products
+-- Centralized ticketing for all Nexum products
 
 -- Ticket number sequence for human-readable IDs
 CREATE SEQUENCE IF NOT EXISTS support_ticket_seq START WITH 1;

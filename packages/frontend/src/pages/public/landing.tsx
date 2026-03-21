@@ -103,7 +103,7 @@ export function LandingPage(): React.JSX.Element {
       {/* Platform Features */}
       <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
         <h2 className="text-center text-2xl font-bold sm:text-3xl">
-          The Redbay platform
+          The Nexum platform
         </h2>
         <p className="mx-auto mt-3 max-w-xl text-center text-muted-foreground">
           Authentication, billing, and provisioning — handled for you.

@@ -74,7 +74,7 @@ export const auth = betterAuth({
 
   plugins: [
     twoFactor({
-      issuer: "Redbay",
+      issuer: "Nexum",
     }),
     jwt({
       jwt: {

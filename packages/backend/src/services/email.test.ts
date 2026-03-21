@@ -46,13 +46,13 @@ describe("email templates", () => {
       userName: "Ryan",
       companyName: "Test Haulage",
       loginUrl: "http://localhost:5170",
-      supportEmail: "support@redbay.com.au",
+      supportEmail: "support@nexum.net.au",
     });
 
     expect(html).toContain("Ryan");
     expect(html).toContain("Test Haulage");
     expect(html).toContain("http://localhost:5170");
-    expect(html).toContain("support@redbay.com.au");
+    expect(html).toContain("support@nexum.net.au");
   });
 
   it("payment-received template renders currency and dates", () => {
@@ -107,7 +107,7 @@ describe("email templates", () => {
     const html = template({
       companyName: "Suspended Co",
       reactivateUrl: "http://localhost:5170/reactivate",
-      supportEmail: "support@redbay.com.au",
+      supportEmail: "support@nexum.net.au",
     });
 
     expect(html).toContain("Suspended Co");
@@ -138,7 +138,7 @@ describe("email templates", () => {
       moduleName: "nexum-invoicing",
       productName: "Nexum",
       retentionDays: 90,
-      supportEmail: "support@redbay.com.au",
+      supportEmail: "support@nexum.net.au",
     });
 
     expect(html).toContain("nexum-invoicing");

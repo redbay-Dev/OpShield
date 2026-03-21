@@ -71,7 +71,7 @@ function wrapInLayout(contentHtml: string): string {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Redbay</title>
+  <title>Nexum</title>
   <style>
     body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f4f4f5; color: #18181b; }
     .wrapper { max-width: 600px; margin: 0 auto; padding: 40px 20px; }
@@ -95,7 +95,7 @@ function wrapInLayout(contentHtml: string): string {
   <div class="wrapper">
     <div class="card">
       <div class="header">
-        <h1>Redbay</h1>
+        <h1>Nexum</h1>
         <div class="subtitle">Operations &amp; Compliance Platform</div>
       </div>
       <hr class="divider">
@@ -104,9 +104,9 @@ function wrapInLayout(contentHtml: string): string {
       </div>
     </div>
     <div class="footer">
-      <p>Redbay Development Pty Ltd</p>
-      <p>This email was sent by <a href="https://redbay.com.au">redbay.com.au</a></p>
-      <p>&copy; ${String(year)} Redbay Development. All rights reserved.</p>
+      <p>Nexum Development Pty Ltd</p>
+      <p>This email was sent by <a href="https://nexum.net.au">nexum.net.au</a></p>
+      <p>&copy; ${String(year)} Nexum Development. All rights reserved.</p>
     </div>
   </div>
 </body>
@@ -190,13 +190,13 @@ export async function sendWelcomeEmail(params: {
 }): Promise<void> {
   await sendEmail({
     to: params.to,
-    subject: `Welcome to Redbay - ${params.companyName}`,
+    subject: `Welcome to Nexum - ${params.companyName}`,
     template: "welcome",
     data: {
       userName: params.userName,
       companyName: params.companyName,
       loginUrl: params.loginUrl,
-      supportEmail: "support@redbay.com.au",
+      supportEmail: "support@nexum.net.au",
     },
   });
 }
@@ -259,7 +259,7 @@ export async function sendAccountSuspendedEmail(params: {
     data: {
       companyName: params.companyName,
       reactivateUrl: params.reactivateUrl,
-      supportEmail: "support@redbay.com.au",
+      supportEmail: "support@nexum.net.au",
     },
   });
 }
@@ -300,7 +300,7 @@ export async function sendModuleRemovedEmail(params: {
       moduleName: params.moduleName,
       productName: params.productName,
       retentionDays: params.retentionDays,
-      supportEmail: "support@redbay.com.au",
+      supportEmail: "support@nexum.net.au",
     },
   });
 }

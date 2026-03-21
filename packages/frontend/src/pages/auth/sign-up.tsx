@@ -87,7 +87,7 @@ export function SignUpPage(): React.JSX.Element {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="admin@redbay.com.au"
+                  placeholder="you@company.com.au"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required

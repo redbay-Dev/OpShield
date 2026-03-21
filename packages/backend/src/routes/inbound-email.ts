@@ -142,11 +142,11 @@ export async function inboundEmailRoutes(
 
     // ── New ticket from email ──
     const headers = email.headers ?? {};
-    const productId = headers["x-redbay-product"] ?? "opshield";
-    const tenantIdFromHeader = headers["x-redbay-tenant-id"];
-    const userId = headers["x-redbay-user-id"] ?? senderEmail;
-    const category = headers["x-redbay-category"] ?? "other";
-    const pageUrl = headers["x-redbay-page"];
+    const productId = headers["x-nexum-product"] ?? "opshield";
+    const tenantIdFromHeader = headers["x-nexum-tenant-id"];
+    const userId = headers["x-nexum-user-id"] ?? senderEmail;
+    const category = headers["x-nexum-category"] ?? "other";
+    const pageUrl = headers["x-nexum-page"];
 
     // Resolve tenant ID
     let resolvedTenantId = tenantIdFromHeader;
@@ -167,7 +167,7 @@ export async function inboundEmailRoutes(
         success: false,
         error: {
           code: "UNPROCESSABLE",
-          message: "Could not determine tenant for this email. Include X-Redbay-Tenant-Id header or ensure the sender has existing tickets.",
+          message: "Could not determine tenant for this email. Include X-Nexum-Tenant-Id header or ensure the sender has existing tickets.",
         },
       });
     }
