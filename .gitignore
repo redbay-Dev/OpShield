@@ -29,6 +29,9 @@ coverage/
 playwright-report/
 test-results/
 
+# Claude Code
+.claude/projects/
+
 # Misc
 *.log
 *.tsbuildinfo
