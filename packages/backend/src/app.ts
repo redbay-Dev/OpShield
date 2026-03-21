@@ -33,6 +33,7 @@ import { authRedirectRoutes } from "./routes/auth-redirect.js";
 import { supportTicketRoutes } from "./routes/support-tickets.js";
 import { adminSupportRoutes } from "./routes/admin-support.js";
 import { inboundEmailRoutes } from "./routes/inbound-email.js";
+import { planRoutes } from "./routes/plans.js";
 
 const TRUSTED_ORIGINS = new Set([
   config.auth.url,
@@ -254,6 +255,7 @@ export function buildApp(): ReturnType<typeof Fastify> {
       void api.register(impersonationRoutes);
       void api.register(supportTicketRoutes);
       void api.register(adminSupportRoutes);
+      void api.register(planRoutes);
     },
     { prefix: "/api/v1" },
   );
