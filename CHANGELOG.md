@@ -2,6 +2,52 @@
 
 All notable changes to OpShield are documented here.
 
+## [Unreleased] — Phase 13: Self-Service Portal, Orphan Cleanup, E2E Tests
+
+### Added
+
+#### Tenant Self-Service Portal (Complete — Backend + Frontend)
+- **`GET /api/v1/me/tenants`**: Returns all tenants the authenticated user belongs to, enriched with module entitlements, subscription status, and renewal dates
+- **`POST /api/v1/me/billing-portal`**: Creates a Stripe Billing Portal session for the user's owned tenant — redirects to Stripe-hosted portal for payment method and subscription management
+- **Account Layout** (`/account/*`): Full sidebar layout with navigation — Overview, Profile, Billing, Notifications
+- **Overview page** (`/account`): Tenant cards showing org name, status, active modules with user counts, subscription status and renewal date, user role
+- **Profile page** (`/account/profile`): Update name (via Better Auth), change password with current/new/confirm fields, 2FA status display, "Log Out Everywhere" button that dispatches session.revoked webhook to all products
+- **Billing page** (`/account/billing`): Shows owned vs member organisations, subscription details, module list, "Manage Billing" button that opens Stripe Billing Portal for payment method and invoice management
+- **Notifications page** (`/account/notifications`): Toggle billing emails, support emails, and product updates with checkbox UI — critical emails (payment failures, suspensions) always bypass preferences
+- **Frontend hooks**: `useMyTenants`, `useNotificationPreferences`, `useUpdateNotificationPreferences`, `useBillingPortal`, `useLogoutEverywhere`
+- **API client**: `fetchMyTenants`, `fetchNotificationPreferences`, `updateNotificationPreferences`, `createBillingPortalSession`, `logoutEverywhere`
+- **Dashboard user menu**: Added "My Account" link to admin dashboard header dropdown
+- **Checkout success redirect**: Now points to `/account` instead of `/admin` so new users land on their self-service portal
+
+#### Orphan Tenant Cleanup Job
+- **`cleanupOrphanTenants()`**: Finds tenants in "onboarding" status older than 7 days (abandoned sign-ups), soft-deletes them, removes associated modules and user memberships, audit logs each cleanup
+- **Scheduled job**: Runs once at server startup then every 6 hours via `setInterval`
+- **Graceful shutdown**: Cleanup interval cleared on SIGTERM/SIGINT
+- **Unit tests**: Function signature and return type verification
+
+#### E2E Tests (Playwright)
+- **`e2e/public-pages.spec.ts`**: Landing page loads, pricing page loads, navigation between pages, login/signup pages accessible
+- **`e2e/auth-flow.spec.ts`**: Login form fields present, sign-up link visible, invalid credentials show error, unauthenticated redirects from admin and account pages, 2FA verify page accessible
+- **`e2e/signup-flow.spec.ts`**: Signup step indicator visible, protected signup steps redirect without auth, checkout success/cancelled pages require auth
+- **`e2e/admin-dashboard.spec.ts`**: All admin pages (dashboard, tenants, webhook log, audit log, system health, revenue) redirect unauthenticated users to login
+- **`e2e/account-pages.spec.ts`**: All account pages (overview, profile, billing, notifications) redirect unauthenticated users to login
+
+### Tests
+- **2 new backend route tests**: `GET /me/tenants` and `POST /me/billing-portal` auth guard verification
+- **1 new cleanup job test**: `cleanupOrphanTenants` function signature test
+- **5 new E2E test files**: 24 Playwright tests covering public pages, auth flow, signup flow, admin dashboard, and account pages
+- **All 202 unit/integration tests passing across 31 test files (4 packages)**
+
+### Decisions
+- DEC-045: Self-service billing uses Stripe Billing Portal (not custom UI) — Stripe handles PCI compliance, payment method changes, and invoice PDFs. We redirect users to Stripe's hosted portal.
+- DEC-046: Orphan cleanup runs as in-process setInterval (not external cron) — simple enough for current scale, avoids infrastructure dependency. Can migrate to a job queue later if needed.
+- DEC-047: E2E tests focus on page accessibility and auth guards first — authenticated flow tests deferred until test user seeding is automated.
+
+### Next Steps (Priority Order)
+1. **Support Hub** (docs/06) — DB schema (tickets, messages), API routes, email processing, admin UI
+2. **Auth Migration Phase 2** — Products implement callback handler to accept OpShield JWTs
+3. **Authenticated E2E tests** — Test user seeding + full login/admin/account flows with Playwright
+
 ## [Unreleased] — Phase 12: Platform Admin Completion, Email Templates, Auth Prep
 
 ### Added

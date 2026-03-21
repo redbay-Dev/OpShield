@@ -1,6 +1,7 @@
 import { Routes, Route } from "react-router";
 import { AuthLayout } from "@frontend/layouts/auth-layout.js";
 import { DashboardLayout } from "@frontend/layouts/dashboard-layout.js";
+import { AccountLayout } from "@frontend/layouts/account-layout.js";
 import { PublicLayout } from "@frontend/layouts/public-layout.js";
 import { SignupLayout } from "@frontend/layouts/signup-layout.js";
 import { ProtectedRoute } from "@frontend/components/protected-route.js";
@@ -24,6 +25,10 @@ import { StepCompanyPage } from "@frontend/pages/signup/step-company.js";
 import { StepReviewPage } from "@frontend/pages/signup/step-review.js";
 import { CheckoutSuccessPage } from "@frontend/pages/signup/checkout-success.js";
 import { CheckoutCancelledPage } from "@frontend/pages/signup/checkout-cancelled.js";
+import { AccountOverviewPage } from "@frontend/pages/account/overview.js";
+import { ProfilePage } from "@frontend/pages/account/profile.js";
+import { BillingPage } from "@frontend/pages/account/billing.js";
+import { NotificationsPage } from "@frontend/pages/account/notifications.js";
 
 export function App(): React.JSX.Element {
   return (
@@ -57,6 +62,16 @@ export function App(): React.JSX.Element {
           <Route path="signup/review" element={<StepReviewPage />} />
           <Route path="signup/success" element={<CheckoutSuccessPage />} />
           <Route path="signup/cancelled" element={<CheckoutCancelledPage />} />
+        </Route>
+      </Route>
+
+      {/* User self-service account */}
+      <Route element={<ProtectedRoute />}>
+        <Route element={<AccountLayout />}>
+          <Route path="account" element={<AccountOverviewPage />} />
+          <Route path="account/profile" element={<ProfilePage />} />
+          <Route path="account/billing" element={<BillingPage />} />
+          <Route path="account/notifications" element={<NotificationsPage />} />
         </Route>
       </Route>
 

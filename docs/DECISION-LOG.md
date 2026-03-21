@@ -325,4 +325,25 @@ Every architectural, product, and workflow decision is recorded here with ration
 **Rationale:** Opt-out model means new users receive everything by default (good for onboarding). Critical emails are exempt per Australian Spam Act functional email exemption. Three broad categories are simpler than per-template granularity while still meaningful.
 **Alternatives considered:** Per-template toggles (too granular, confusing UI); all emails optional (violates compliance requirements for payment failure notices); no preferences (violates Spam Act for marketing emails).
 
+### DEC-045: Self-service billing via Stripe Billing Portal
+**Date:** 2026-03-21
+**Context:** End users need to manage payment methods, view invoices, and change billing details. Building a custom billing UI would require PCI compliance.
+**Decision:** Use Stripe Billing Portal — `POST /me/billing-portal` creates a portal session and returns the URL. Frontend redirects user to Stripe's hosted portal.
+**Rationale:** Stripe handles PCI compliance, payment method tokenisation, invoice PDFs, and subscription management. Eliminates weeks of custom UI work with better security guarantees.
+**Alternatives considered:** Custom billing UI with Stripe Elements (more control but PCI scope increases); direct Stripe dashboard links (no branding control).
+
+### DEC-046: Orphan tenant cleanup as in-process scheduled job
+**Date:** 2026-03-21
+**Context:** Tenants created during sign-up checkout start as "onboarding" status. If the user abandons payment, these records remain indefinitely.
+**Decision:** `cleanupOrphanTenants()` runs as a `setInterval` job (every 6 hours + once at startup). Soft-deletes tenants in "onboarding" status older than 7 days, removes related modules and user memberships, audit logs each cleanup.
+**Rationale:** Simple, no external dependencies. At current scale (single server), in-process scheduling is sufficient. Can migrate to a proper job queue (BullMQ/Redis) if needed later.
+**Alternatives considered:** External cron job (extra infrastructure); Redis-based job queue (over-engineered for a single periodic task); manual cleanup by admin (error-prone, forgotten).
+
+### DEC-047: E2E tests focus on page accessibility and auth guards first
+**Date:** 2026-03-21
+**Context:** Need E2E tests but the app requires authenticated sessions (2FA mandatory) for most flows. Test user seeding and login automation require additional setup.
+**Decision:** First round of E2E tests covers: public page loading, form field presence, auth guard redirects for all protected routes. Full authenticated flow tests deferred until test user seeding is automated.
+**Rationale:** Getting 24 E2E tests running immediately validates routing, page rendering, and security (auth redirects) without blocking on test infrastructure. Authenticated tests will follow once a test user + session fixture is set up.
+**Alternatives considered:** Skip E2E tests entirely until infrastructure is ready (leaves zero coverage); mock auth in tests (doesn't test real behaviour).
+
 ---

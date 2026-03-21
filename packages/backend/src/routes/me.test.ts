@@ -60,4 +60,30 @@ describe("me routes", () => {
       expect(response.statusCode).toBe(401);
     });
   });
+
+  describe("GET /api/v1/me/tenants", () => {
+    it("returns 401 without authentication", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/v1/me/tenants",
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.payload) as { success: boolean };
+      expect(body.success).toBe(false);
+    });
+  });
+
+  describe("POST /api/v1/me/billing-portal", () => {
+    it("returns 401 without authentication", async () => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/v1/me/billing-portal",
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.payload) as { success: boolean };
+      expect(body.success).toBe(false);
+    });
+  });
 });

@@ -42,8 +42,8 @@ export function CheckoutSuccessPage(): React.JSX.Element {
 
         <div className="mt-2 space-y-2">
           <Button className="w-full" asChild>
-            <Link to="/admin">
-              Go to Dashboard
+            <Link to="/account">
+              Go to My Account
               <ArrowRight />
             </Link>
           </Button>

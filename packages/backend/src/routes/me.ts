@@ -1,12 +1,16 @@
 import type { FastifyInstance } from "fastify";
-import { eq } from "drizzle-orm";
+import { eq, and, isNull } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { platformAdmins } from "../db/schema/tenants.js";
+import { platformAdmins, tenants, tenantModules } from "../db/schema/tenants.js";
+import { tenantUsers } from "../db/schema/tenant-users.js";
+import { subscriptions } from "../db/schema/billing.js";
 import { notificationPreferences } from "../db/schema/notification-preferences.js";
 import { getSession } from "../middleware/auth.js";
 import { requireAuth, type AuthenticatedUser } from "../middleware/require-auth.js";
 import { updateNotificationPreferencesSchema } from "@opshield/shared";
 import { dispatchSessionRevokedWebhook } from "../services/webhook.js";
+import { stripe } from "../services/stripe.js";
+import { config } from "../config.js";
 
 export async function meRoutes(app: FastifyInstance): Promise<void> {
   app.get("/me/admin-status", async (request, reply) => {
@@ -139,6 +143,138 @@ export async function meRoutes(app: FastifyInstance): Promise<void> {
       return {
         success: true,
         data: updated,
+      };
+    },
+  );
+
+  // ── My Tenants ──
+
+  app.get(
+    "/me/tenants",
+    { preHandler: [requireAuth] },
+    async (request) => {
+      const { id: userId } = (request as typeof request & { authUser: AuthenticatedUser }).authUser;
+
+      const memberships = await db
+        .select({
+          tenantId: tenantUsers.tenantId,
+          role: tenantUsers.role,
+          tenantName: tenants.name,
+          tenantSlug: tenants.slug,
+          tenantStatus: tenants.status,
+          tenantBillingEmail: tenants.billingEmail,
+          tenantCreatedAt: tenants.createdAt,
+        })
+        .from(tenantUsers)
+        .innerJoin(tenants, eq(tenantUsers.tenantId, tenants.id))
+        .where(
+          and(
+            eq(tenantUsers.userId, userId),
+            isNull(tenants.deletedAt),
+          ),
+        );
+
+      // Enrich with modules and subscription status
+      const enriched = await Promise.all(
+        memberships.map(async (m) => {
+          const modules = await db
+            .select({
+              productId: tenantModules.productId,
+              moduleId: tenantModules.moduleId,
+              status: tenantModules.status,
+              maxUsers: tenantModules.maxUsers,
+              currentUsers: tenantModules.currentUsers,
+            })
+            .from(tenantModules)
+            .where(eq(tenantModules.tenantId, m.tenantId));
+
+          const [sub] = await db
+            .select({
+              status: subscriptions.status,
+              currentPeriodEnd: subscriptions.currentPeriodEnd,
+              cancelAtPeriodEnd: subscriptions.cancelAtPeriodEnd,
+            })
+            .from(subscriptions)
+            .where(eq(subscriptions.tenantId, m.tenantId))
+            .limit(1);
+
+          return {
+            tenantId: m.tenantId,
+            role: m.role,
+            name: m.tenantName,
+            slug: m.tenantSlug,
+            status: m.tenantStatus,
+            billingEmail: m.tenantBillingEmail,
+            createdAt: m.tenantCreatedAt.toISOString(),
+            modules,
+            subscription: sub
+              ? {
+                  status: sub.status,
+                  currentPeriodEnd: sub.currentPeriodEnd?.toISOString() ?? null,
+                  cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
+                }
+              : null,
+          };
+        }),
+      );
+
+      return {
+        success: true,
+        data: enriched,
+      };
+    },
+  );
+
+  // ── Stripe Billing Portal ──
+
+  app.post(
+    "/me/billing-portal",
+    { preHandler: [requireAuth] },
+    async (request, reply) => {
+      const { id: userId } = (request as typeof request & { authUser: AuthenticatedUser }).authUser;
+
+      // Find the user's tenant (use first owned tenant)
+      const [membership] = await db
+        .select({
+          tenantId: tenantUsers.tenantId,
+          role: tenantUsers.role,
+          stripeCustomerId: tenants.stripeCustomerId,
+        })
+        .from(tenantUsers)
+        .innerJoin(tenants, eq(tenantUsers.tenantId, tenants.id))
+        .where(
+          and(
+            eq(tenantUsers.userId, userId),
+            eq(tenantUsers.role, "owner"),
+            isNull(tenants.deletedAt),
+          ),
+        )
+        .limit(1);
+
+      if (!membership) {
+        void reply.status(404).send({
+          success: false,
+          error: { code: "NOT_FOUND", message: "No owned tenant found" },
+        });
+        return;
+      }
+
+      if (!membership.stripeCustomerId) {
+        void reply.status(400).send({
+          success: false,
+          error: { code: "NO_BILLING", message: "Tenant has no billing account" },
+        });
+        return;
+      }
+
+      const session = await stripe.billingPortal.sessions.create({
+        customer: membership.stripeCustomerId,
+        return_url: `${config.frontendUrl}/account/billing`,
+      });
+
+      return {
+        success: true,
+        data: { url: session.url },
       };
     },
   );

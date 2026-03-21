@@ -1,20 +1,17 @@
 import { useState } from "react";
 import { Outlet, NavLink, useNavigate } from "react-router";
 import {
-  LayoutDashboard,
+  User,
+  CreditCard,
   Building2,
-  Webhook,
-  ScrollText,
-  HeartPulse,
-  TrendingUp,
+  Bell,
+  Shield,
   Menu,
   LogOut,
-  User,
-  Shield,
   ChevronDown,
+  ArrowLeft,
 } from "lucide-react";
 import { Button } from "@frontend/components/ui/button.js";
-import { Badge } from "@frontend/components/ui/badge.js";
 import { Separator } from "@frontend/components/ui/separator.js";
 import {
   Sheet,
@@ -30,7 +27,6 @@ import {
 } from "@frontend/components/ui/dropdown-menu.js";
 import { cn } from "@frontend/lib/utils.js";
 import { authClient } from "@frontend/lib/auth-client.js";
-import { useAdminPermissions } from "@frontend/hooks/use-admin-permissions.js";
 
 interface NavItem {
   label: string;
@@ -39,51 +35,27 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
-  { label: "Tenants", href: "/admin/tenants", icon: Building2 },
-  { label: "Webhook Log", href: "/admin/webhook-log", icon: Webhook },
-  { label: "Revenue", href: "/admin/revenue", icon: TrendingUp },
-  { label: "Audit Log", href: "/admin/audit-log", icon: ScrollText },
-  { label: "System Health", href: "/admin/system-health", icon: HeartPulse },
+  { label: "Overview", href: "/account", icon: Building2 },
+  { label: "Profile", href: "/account/profile", icon: User },
+  { label: "Billing", href: "/account/billing", icon: CreditCard },
+  { label: "Notifications", href: "/account/notifications", icon: Bell },
 ];
 
-const ROLE_LABELS: Record<string, string> = {
-  super_admin: "Super Admin",
-  support: "Support",
-  viewer: "Viewer",
-};
-
-const ROLE_VARIANT: Record<string, "default" | "secondary" | "outline"> = {
-  super_admin: "default",
-  support: "secondary",
-  viewer: "outline",
-};
-
-function SidebarContent({ role }: { role: string | null }): React.JSX.Element {
+function SidebarContent(): React.JSX.Element {
   return (
     <nav className="flex flex-1 flex-col gap-1 p-4">
       <div className="mb-2 flex items-center gap-2 px-2">
         <div className="bg-primary text-primary-foreground flex h-8 w-8 items-center justify-center rounded-md">
           <Shield className="h-5 w-5" />
         </div>
-        <span className="text-lg font-semibold">OpShield</span>
+        <span className="text-lg font-semibold">My Account</span>
       </div>
-      {role && (
-        <div className="mb-2 px-2">
-          <Badge variant={ROLE_VARIANT[role] ?? "outline"} className="text-xs">
-            {ROLE_LABELS[role] ?? role}
-          </Badge>
-        </div>
-      )}
       <Separator className="mb-4" />
-      <p className="text-muted-foreground mb-2 px-2 text-xs font-medium uppercase tracking-wider">
-        Management
-      </p>
       {NAV_ITEMS.map((item) => (
         <NavLink
           key={item.href}
           to={item.href}
-          end={item.href === "/admin"}
+          end={item.href === "/account"}
           className={({ isActive }) =>
             cn(
               "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
@@ -101,10 +73,9 @@ function SidebarContent({ role }: { role: string | null }): React.JSX.Element {
   );
 }
 
-export function DashboardLayout(): React.JSX.Element {
+export function AccountLayout(): React.JSX.Element {
   const [sheetOpen, setSheetOpen] = useState(false);
   const { data: session } = authClient.useSession();
-  const { role } = useAdminPermissions();
   const navigate = useNavigate();
 
   async function handleSignOut(): Promise<void> {
@@ -116,7 +87,16 @@ export function DashboardLayout(): React.JSX.Element {
     <div className="flex min-h-screen">
       {/* Desktop sidebar */}
       <aside className="bg-sidebar border-sidebar-border hidden w-64 flex-col border-r lg:flex">
-        <SidebarContent role={role} />
+        <SidebarContent />
+        <div className="border-t p-4">
+          <NavLink
+            to="/"
+            className="text-muted-foreground hover:text-foreground flex items-center gap-2 text-sm"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to home
+          </NavLink>
+        </div>
       </aside>
 
       {/* Main content */}
@@ -133,7 +113,7 @@ export function DashboardLayout(): React.JSX.Element {
               </SheetTrigger>
               <SheetContent side="left" className="w-64 p-0">
                 <SheetTitle className="sr-only">Navigation</SheetTitle>
-                <SidebarContent role={role} />
+                <SidebarContent />
               </SheetContent>
             </Sheet>
 
@@ -144,16 +124,12 @@ export function DashboardLayout(): React.JSX.Element {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="gap-2">
                   <span className="text-sm">
-                    {session?.user.name ?? session?.user.email ?? "Admin"}
+                    {session?.user.name ?? session?.user.email ?? "User"}
                   </span>
                   <ChevronDown className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => void navigate("/account")}>
-                  <User className="mr-2 h-4 w-4" />
-                  My Account
-                </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => void handleSignOut()}>
                   <LogOut className="mr-2 h-4 w-4" />
                   Sign out
