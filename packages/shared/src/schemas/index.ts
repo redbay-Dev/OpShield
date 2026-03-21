@@ -170,3 +170,20 @@ export const subscriptionResponseSchema = z.object({
 });
 
 export type SubscriptionResponse = z.infer<typeof subscriptionResponseSchema>;
+
+/** Invoice response schema */
+export const invoiceResponseSchema = z.object({
+  id: z.string().uuid(),
+  stripeInvoiceId: z.string(),
+  status: z.string(),
+  amountDue: z.number().int(),
+  amountPaid: z.number().int(),
+  currency: z.string(),
+  invoiceUrl: z.string().nullable(),
+  pdfUrl: z.string().nullable(),
+  periodStart: z.string().nullable(),
+  periodEnd: z.string().nullable(),
+  createdAt: z.string(),
+});
+
+export type InvoiceResponse = z.infer<typeof invoiceResponseSchema>;

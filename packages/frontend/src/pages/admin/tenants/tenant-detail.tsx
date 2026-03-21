@@ -51,6 +51,7 @@ import {
   SAFESPEC_MODULES,
   NEXUM_MODULES,
 } from "@opshield/shared/constants";
+import { BillingTab } from "./billing-tab.js";
 
 const STATUS_VARIANT: Record<
   string,
@@ -275,6 +276,7 @@ export function TenantDetailPage(): React.JSX.Element {
               ? ` (${String(entitlements.modules.length)})`
               : ""}
           </TabsTrigger>
+          <TabsTrigger value="billing">Billing</TabsTrigger>
         </TabsList>
 
         <TabsContent value="info" className="space-y-4">
@@ -613,6 +615,10 @@ export function TenantDetailPage(): React.JSX.Element {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="billing">
+          <BillingTab tenantId={tenantId ?? ""} />
         </TabsContent>
       </Tabs>
     </div>

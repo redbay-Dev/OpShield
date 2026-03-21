@@ -86,11 +86,20 @@ export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
   return handleResponse<T>(response);
 }
 
-export async function apiDelete<T = void>(path: string): Promise<T> {
+export async function apiDelete<T = void>(
+  path: string,
+  body?: unknown,
+): Promise<T> {
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (body !== undefined) {
+    headers["Content-Type"] = "application/json";
+  }
+
   const response = await fetch(`${BASE_PATH}${path}`, {
     method: "DELETE",
     credentials: "include",
-    headers: { Accept: "application/json" },
+    headers,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
   return handleResponse<T>(response);

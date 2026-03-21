@@ -2,7 +2,21 @@
 
 All notable changes to OpShield are documented here.
 
-## [Unreleased] — Phase 5: Stripe Billing Integration (Backend Core)
+## [Unreleased] — Phase 6: Billing UI + Invoice API
+
+### Added
+- **Billing tab on tenant detail page**: Subscription status card with Stripe subscription ID, period dates, bundle discount, line items table, and cancel button with confirmation dialog
+- **Create Subscription dialog**: Select billing interval (monthly/annual), creates Stripe subscription from tenant's active modules
+- **Sync with Stripe button**: Re-fetches subscription status from Stripe to reconcile local state
+- **Cancel Subscription flow**: Confirmation dialog, cancels at period end via Stripe API
+- **Invoice history table**: Lists all invoices with status badges, amount, billing period, and links to Stripe-hosted invoice page and PDF download
+- **Invoice API endpoint**: `GET /api/v1/tenants/:tenantId/invoices` — platform admin route returning all invoices for a tenant, ordered by date descending
+- **Frontend billing hooks**: `useSubscription`, `useCreateSubscription`, `useSyncSubscription`, `useCancelSubscription`, `useInvoices` React Query hooks
+- **Invoice response schema**: `invoiceResponseSchema` added to shared package
+- **`apiDelete` body support**: DELETE requests can now include a JSON body (needed for cancel subscription's `atPeriodEnd` parameter)
+- **Invoice route tests**: Auth guard verification for invoices endpoint
+
+## [0.5.0] — Phase 5: Stripe Billing Integration (Backend Core)
 
 ### Added
 - **Stripe webhook handler**: `POST /api/webhooks/stripe` with signature verification, idempotent event processing via `billing_events` table, and handlers for `checkout.session.completed`, `invoice.payment_succeeded`, `invoice.payment_failed`, `customer.subscription.updated`, `customer.subscription.deleted`
@@ -49,9 +63,9 @@ All notable changes to OpShield are documented here.
 ### Next Steps (Priority Order)
 1. **Configure Stripe test keys** — Set `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` in `.env.development`
 2. **Run price sync** — `pnpm stripe:sync` to create Stripe products/prices from plan data
-3. **Frontend billing UI** — Subscription status, create/cancel actions in tenant detail
+3. **Usage reporting** — Product backends report user counts via webhook, populate `tenant_usage`
 4. **Public checkout flow** — Stripe Checkout integration for self-service sign-up
-5. **Usage reporting** — Product backends report user counts via webhook, populate `tenant_usage`
+5. **Support ticketing system** — Email-based support hub (spec in docs/06)
 
 ## [0.3.0] — Phase 3: Auth UI + Platform Admin Dashboard
 

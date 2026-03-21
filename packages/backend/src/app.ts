@@ -16,6 +16,7 @@ import { meRoutes } from "./routes/me.js";
 import { serviceKeyRoutes } from "./routes/service-keys.js";
 import { stripeWebhookRoute } from "./routes/stripe-webhook.js";
 import { subscriptionRoutes } from "./routes/subscriptions.js";
+import { invoiceRoutes } from "./routes/invoices.js";
 
 const TRUSTED_ORIGINS = new Set([
   config.auth.url,
@@ -211,6 +212,7 @@ export function buildApp(): ReturnType<typeof Fastify> {
       void api.register(moduleRoutes);
       void api.register(serviceKeyRoutes);
       void api.register(subscriptionRoutes);
+      void api.register(invoiceRoutes);
     },
     { prefix: "/api/v1" },
   );
