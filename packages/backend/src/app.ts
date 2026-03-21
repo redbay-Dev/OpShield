@@ -23,6 +23,12 @@ import { webhookDeliveryRoutes } from "./routes/webhook-deliveries.js";
 import { signupRoutes } from "./routes/signup.js";
 import { auditLogRoutes } from "./routes/audit-log.js";
 import { ssoProviderRoutes } from "./routes/sso-providers.js";
+import { systemHealthRoutes } from "./routes/system-health.js";
+import { analyticsRoutes } from "./routes/analytics.js";
+import { exportRoutes } from "./routes/export.js";
+import { tenantActionRoutes } from "./routes/tenant-actions.js";
+import { impersonationRoutes } from "./routes/impersonation.js";
+import { authRedirectRoutes } from "./routes/auth-redirect.js";
 
 const TRUSTED_ORIGINS = new Set([
   config.auth.url,
@@ -190,6 +196,9 @@ export function buildApp(): ReturnType<typeof Fastify> {
     return sendAuthResponse(response, reply);
   });
 
+  // ── Auth authorize/redirect (SSO prep) ──
+  void app.register(authRedirectRoutes);
+
   // ── JWKS endpoint ──
   app.get("/.well-known/jwks.json", async (request, reply) => {
     const response = await handleAuthRequest("/api/auth/.well-known/jwks.json", "GET", request.headers as Record<string, string>);
@@ -225,6 +234,11 @@ export function buildApp(): ReturnType<typeof Fastify> {
       void api.register(signupRoutes);
       void api.register(auditLogRoutes);
       void api.register(ssoProviderRoutes);
+      void api.register(systemHealthRoutes);
+      void api.register(analyticsRoutes);
+      void api.register(exportRoutes);
+      void api.register(tenantActionRoutes);
+      void api.register(impersonationRoutes);
     },
     { prefix: "/api/v1" },
   );

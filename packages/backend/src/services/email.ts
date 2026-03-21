@@ -3,7 +3,10 @@ import Handlebars from "handlebars";
 import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { eq } from "drizzle-orm";
 import { config } from "../config.js";
+import { db } from "../db/client.js";
+import { notificationPreferences } from "../db/schema/notification-preferences.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const TEMPLATE_DIR = resolve(__dirname, "../email-templates");
@@ -117,6 +120,43 @@ function renderEmail(
   const template = loadTemplate(templateName);
   const contentHtml = template(data);
   return wrapInLayout(contentHtml);
+}
+
+// ── Notification Preference Check ──
+
+export type EmailCategory = "billing" | "support" | "product_updates";
+
+/**
+ * Check if a user has opted in to receive emails of a given category.
+ * Returns true if no preferences exist (defaults are all true).
+ * Critical emails (payment-failed, suspension, security) should NOT call this.
+ */
+export async function shouldSendEmail(
+  userId: string,
+  category: EmailCategory,
+): Promise<boolean> {
+  const [prefs] = await db
+    .select({
+      billingEmails: notificationPreferences.billingEmails,
+      supportEmails: notificationPreferences.supportEmails,
+      productUpdates: notificationPreferences.productUpdates,
+    })
+    .from(notificationPreferences)
+    .where(eq(notificationPreferences.userId, userId))
+    .limit(1);
+
+  if (!prefs) return true; // Defaults are all true
+
+  switch (category) {
+    case "billing":
+      return prefs.billingEmails;
+    case "support":
+      return prefs.supportEmails;
+    case "product_updates":
+      return prefs.productUpdates;
+    default:
+      return true;
+  }
 }
 
 // ── Send Functions ──
@@ -301,6 +341,62 @@ export async function sendProvisioningFailedEmail(params: {
       productId: params.productId,
       error: params.error,
       adminUrl: params.adminUrl,
+    },
+  });
+}
+
+export async function sendTrialEndingEmail(params: {
+  to: string;
+  companyName: string;
+  trialEndDate: string;
+  upgradeUrl: string;
+}): Promise<void> {
+  await sendEmail({
+    to: params.to,
+    subject: `Your trial ends in 3 days - ${params.companyName}`,
+    template: "trial-ending",
+    data: {
+      companyName: params.companyName,
+      trialEndDate: params.trialEndDate,
+      upgradeUrl: params.upgradeUrl,
+    },
+  });
+}
+
+export async function sendTrialExpiredEmail(params: {
+  to: string;
+  companyName: string;
+  subscribeUrl: string;
+}): Promise<void> {
+  await sendEmail({
+    to: params.to,
+    subject: `Trial expired - ${params.companyName}`,
+    template: "trial-expired",
+    data: {
+      companyName: params.companyName,
+      subscribeUrl: params.subscribeUrl,
+    },
+  });
+}
+
+export async function sendPaymentFailedFinalEmail(params: {
+  to: string;
+  companyName: string;
+  amountCents: number;
+  currency: string;
+  suspensionDate: string;
+  updatePaymentUrl: string;
+}): Promise<void> {
+  await sendEmail({
+    to: params.to,
+    subject: `Urgent: Account suspension pending - ${params.companyName}`,
+    template: "payment-failed-final",
+    data: {
+      companyName: params.companyName,
+      amountCents: params.amountCents,
+      currency: params.currency.toUpperCase(),
+      suspensionDate: params.suspensionDate,
+      updatePaymentUrl: params.updatePaymentUrl,
     },
   });
 }

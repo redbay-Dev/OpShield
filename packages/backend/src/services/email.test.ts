@@ -15,11 +15,14 @@ describe("email templates", () => {
       "welcome.hbs",
       "payment-received.hbs",
       "payment-failed.hbs",
+      "payment-failed-final.hbs",
       "account-suspended.hbs",
       "module-added.hbs",
       "module-removed.hbs",
       "plan-changed.hbs",
       "provisioning-failed.hbs",
+      "trial-ending.hbs",
+      "trial-expired.hbs",
     ];
 
     for (const name of required) {
@@ -154,6 +157,52 @@ describe("email templates", () => {
     expect(html).toContain("nexum");
     expect(html).toContain("Connection timeout");
     expect(html).toContain("admin/tenants/123");
+  });
+
+  it("trial-ending template renders trial end date and upgrade URL", () => {
+    const source = readFileSync(resolve(TEMPLATE_DIR, "trial-ending.hbs"), "utf-8");
+    const template = Handlebars.compile(source);
+    const html = template({
+      companyName: "Trial Co",
+      trialEndDate: "2026-03-24T00:00:00Z",
+      upgradeUrl: "http://localhost:5170/pricing",
+    });
+
+    expect(html).toContain("Trial Co");
+    expect(html).toContain("http://localhost:5170/pricing");
+    expect(html).toContain("3 days");
+  });
+
+  it("trial-expired template renders subscribe URL", () => {
+    const source = readFileSync(resolve(TEMPLATE_DIR, "trial-expired.hbs"), "utf-8");
+    const template = Handlebars.compile(source);
+    const html = template({
+      companyName: "Expired Co",
+      subscribeUrl: "http://localhost:5170/pricing",
+    });
+
+    expect(html).toContain("Expired Co");
+    expect(html).toContain("read-only");
+    expect(html).toContain("90 days");
+    expect(html).toContain("http://localhost:5170/pricing");
+  });
+
+  it("payment-failed-final template renders suspension date", () => {
+    const source = readFileSync(resolve(TEMPLATE_DIR, "payment-failed-final.hbs"), "utf-8");
+    const template = Handlebars.compile(source);
+    const html = template({
+      companyName: "Failing Co",
+      amountCents: 15000,
+      currency: "AUD",
+      suspensionDate: "2026-03-28T00:00:00Z",
+      updatePaymentUrl: "http://localhost:5170/billing",
+    });
+
+    expect(html).toContain("Failing Co");
+    expect(html).toContain("$150.00");
+    expect(html).toContain("AUD");
+    expect(html).toContain("suspended");
+    expect(html).toContain("http://localhost:5170/billing");
   });
 
   it("no template uses triple-brace unescaped output", () => {

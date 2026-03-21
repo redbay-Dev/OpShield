@@ -1,0 +1,21 @@
+<p>Hi there,</p>
+
+<p>We have been unable to collect payment for <strong>{{companyName}}</strong> after multiple attempts.</p>
+
+<div class="highlight">
+  <p style="margin: 0;"><strong>Outstanding amount:</strong> {{formatCurrency amountCents}} {{currency}}</p>
+  <p style="margin: 4px 0 0;"><strong>Account suspension date:</strong> {{formatDate suspensionDate}}</p>
+</div>
+
+<p>If we cannot process your payment by <strong>{{formatDate suspensionDate}}</strong>, your account will be <strong>suspended</strong>. While suspended:</p>
+<ul style="padding-left: 20px;">
+  <li>All users will lose write access across SafeSpec and Nexum</li>
+  <li>Your data remains safe and will not be deleted</li>
+  <li>You can reactivate at any time by updating your payment method</li>
+</ul>
+
+<p style="text-align: center; margin: 24px 0;">
+  <a href="{{updatePaymentUrl}}" class="btn btn-destructive">Update payment method now</a>
+</p>
+
+<p>If you need assistance, contact us at <a href="mailto:support@redbay.com.au">support@redbay.com.au</a>.</p>

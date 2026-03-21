@@ -159,6 +159,65 @@ export function retryProvisioning(
   );
 }
 
+// ── Tenant Actions (Danger Zone) ──
+
+interface TenantActionInput {
+  reason: string;
+}
+
+interface ScheduleDeletionInput {
+  reason: string;
+  confirmSlug: string;
+}
+
+export function suspendTenant(
+  tenantId: string,
+  data: TenantActionInput,
+): Promise<{ status: string }> {
+  return apiPost<{ status: string }>(`/tenants/${tenantId}/suspend`, data);
+}
+
+export function cancelTenantSubscription(
+  tenantId: string,
+  data: TenantActionInput,
+): Promise<{ cancelAtPeriodEnd: boolean }> {
+  return apiPost<{ cancelAtPeriodEnd: boolean }>(
+    `/tenants/${tenantId}/cancel-subscription`,
+    data,
+  );
+}
+
+export function scheduleTenantDeletion(
+  tenantId: string,
+  data: ScheduleDeletionInput,
+): Promise<{ status: string; scheduledDeletionDate: string }> {
+  return apiPost<{ status: string; scheduledDeletionDate: string }>(
+    `/tenants/${tenantId}/schedule-deletion`,
+    data,
+  );
+}
+
+// ── Impersonation ──
+
+interface StartImpersonationInput {
+  tenantId: string;
+  product: "safespec" | "nexum";
+  reason: string;
+}
+
+interface ImpersonationResult {
+  token: string;
+  redirectUrl: string;
+  expiresAt: string;
+  tenantName: string;
+}
+
+export function startImpersonation(
+  data: StartImpersonationInput,
+): Promise<ImpersonationResult> {
+  return apiPost<ImpersonationResult>("/impersonate", data);
+}
+
 export type {
   PaginatedResponse,
   TenantListParams,
@@ -168,4 +227,8 @@ export type {
   ProvisionResponse,
   ProvisionResult,
   RetryProvisioningInput,
+  TenantActionInput,
+  ScheduleDeletionInput,
+  StartImpersonationInput,
+  ImpersonationResult,
 };

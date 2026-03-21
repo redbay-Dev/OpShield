@@ -17,9 +17,16 @@ import {
   fetchProvisioningStatus,
   provisionTenant,
   retryProvisioning,
+  suspendTenant,
+  cancelTenantSubscription,
+  scheduleTenantDeletion,
+  startImpersonation,
   type TenantListParams,
   type ProvisionTenantInput,
   type RetryProvisioningInput,
+  type TenantActionInput,
+  type ScheduleDeletionInput,
+  type StartImpersonationInput,
 } from "@frontend/api/tenants.js";
 
 export function useTenants(params?: TenantListParams) {
@@ -159,5 +166,50 @@ export function useRetryProvisioning(tenantId: string) {
         queryKey: ["tenants", tenantId, "provisioning"],
       });
     },
+  });
+}
+
+// ── Tenant Actions (Danger Zone) ──
+
+export function useSuspendTenant(tenantId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: TenantActionInput) => suspendTenant(tenantId, data),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["tenants"] });
+    },
+  });
+}
+
+export function useCancelTenantSubscription(tenantId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: TenantActionInput) =>
+      cancelTenantSubscription(tenantId, data),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["tenants"] });
+    },
+  });
+}
+
+export function useScheduleTenantDeletion(tenantId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: ScheduleDeletionInput) =>
+      scheduleTenantDeletion(tenantId, data),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["tenants"] });
+    },
+  });
+}
+
+// ── Impersonation ──
+
+export function useStartImpersonation() {
+  return useMutation({
+    mutationFn: (data: StartImpersonationInput) => startImpersonation(data),
   });
 }

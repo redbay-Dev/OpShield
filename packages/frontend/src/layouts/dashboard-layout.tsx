@@ -5,6 +5,8 @@ import {
   Building2,
   Webhook,
   ScrollText,
+  HeartPulse,
+  TrendingUp,
   Menu,
   LogOut,
   Shield,
@@ -39,7 +41,9 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
   { label: "Tenants", href: "/admin/tenants", icon: Building2 },
   { label: "Webhook Log", href: "/admin/webhook-log", icon: Webhook },
+  { label: "Revenue", href: "/admin/revenue", icon: TrendingUp },
   { label: "Audit Log", href: "/admin/audit-log", icon: ScrollText },
+  { label: "System Health", href: "/admin/system-health", icon: HeartPulse },
 ];
 
 const ROLE_LABELS: Record<string, string> = {

@@ -297,4 +297,32 @@ Every architectural, product, and workflow decision is recorded here with ration
 **Rationale:** Prevents startup failures in dev/CI environments that don't have Azure AD credentials configured. SSO is an additive feature — its absence doesn't break any core functionality.
 **Alternatives considered:** Always register with dummy credentials (would fail on actual SSO attempts with misleading errors); require credentials in all environments (blocks local dev).
 
+### DEC-041: Impersonation uses opaque tokens, not JWTs
+**Date:** 2026-03-21
+**Context:** Impersonation needs to let admins "log into" products as tenant owners. Products don't yet validate OpShield JWTs (auth migration Phase 2-5 not done).
+**Decision:** Generate cryptographically random opaque tokens, store SHA-256 hash in `impersonation_tokens` table. Products validate by calling `GET /api/v1/impersonate/validate?token=...` with their service API key. Tokens expire after 30 minutes.
+**Rationale:** Works without products implementing JWT validation. Service-key authenticated validation ensures only real products can check tokens. SHA-256 hashing follows the same pattern as service API keys. Can migrate to JWT-based impersonation when auth migration is complete.
+**Alternatives considered:** JWT-based impersonation tokens (products can't validate JWTs yet); shared session store (tight coupling); direct DB access from products (security risk).
+
+### DEC-042: Auth authorize returns JSON, not redirect
+**Date:** 2026-03-21
+**Context:** The `/api/auth/authorize` endpoint for cross-domain SSO initially used server-side redirects (`reply.redirect()`), but Semgrep flagged all `redirect()` calls with dynamic URLs as open redirect vulnerabilities (CWE-601), even when the target URLs were built from server-side config.
+**Decision:** Return a JSON response with the allowlisted callback URL and user info. The client (product frontend) performs the redirect, or uses the data directly. No server-side redirects in this endpoint.
+**Rationale:** Eliminates open redirect findings entirely. The callback URLs are still controlled by server config (not user input), but JSON responses avoid the scan noise. Products can fetch this endpoint via AJAX and redirect client-side.
+**Alternatives considered:** Server-side redirect with Semgrep suppression comments (masks the issue); custom redirect validation middleware (adds complexity for no security gain since URLs come from config).
+
+### DEC-043: Revenue analytics from existing tables
+**Date:** 2026-03-21
+**Context:** Revenue dashboard needs MRR, churn, ARPU metrics. Could build dedicated analytics tables/materialized views or compute from existing data.
+**Decision:** Compute all analytics metrics on-demand from existing `subscriptions`, `subscription_items`, `plans`, and `tenants` tables. No new analytics infrastructure.
+**Rationale:** Current scale (< 1000 tenants) makes on-demand queries fast enough. Premature optimization with materialized views adds migration and cache invalidation complexity. Can add caching/materialization when query performance becomes a concern.
+**Alternatives considered:** Dedicated analytics tables updated by triggers (over-engineered for current scale); external analytics service (unnecessary dependency); Stripe Sigma queries (limited to Stripe data, misses tenant status info).
+
+### DEC-044: Notification preferences opt-out with critical bypass
+**Date:** 2026-03-21
+**Context:** Users need control over non-essential emails (Australian Spam Act compliance), but critical emails (payment failure, account suspension) must always be delivered.
+**Decision:** `notification_preferences` table with three boolean columns (billing, support, product_updates), all defaulting to true. Email service checks preferences via `shouldSendEmail()` before sending. Critical emails (payment-failed, payment-failed-final, account-suspended, security alerts) bypass the preference check entirely.
+**Rationale:** Opt-out model means new users receive everything by default (good for onboarding). Critical emails are exempt per Australian Spam Act functional email exemption. Three broad categories are simpler than per-template granularity while still meaningful.
+**Alternatives considered:** Per-template toggles (too granular, confusing UI); all emails optional (violates compliance requirements for payment failure notices); no preferences (violates Spam Act for marketing emails).
+
 ---

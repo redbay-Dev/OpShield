@@ -370,6 +370,26 @@ export const upsertSsoProviderSchema = z.object({
 
 export type UpsertSsoProviderInput = z.infer<typeof upsertSsoProviderSchema>;
 
+// ── Notification Preferences Schemas ──────────────────────────────────
+
+/** Notification preferences response */
+export const notificationPreferencesSchema = z.object({
+  billingEmails: z.boolean(),
+  supportEmails: z.boolean(),
+  productUpdates: z.boolean(),
+});
+
+export type NotificationPreferences = z.infer<typeof notificationPreferencesSchema>;
+
+/** Update notification preferences */
+export const updateNotificationPreferencesSchema = z.object({
+  billingEmails: z.boolean().optional(),
+  supportEmails: z.boolean().optional(),
+  productUpdates: z.boolean().optional(),
+});
+
+export type UpdateNotificationPreferencesInput = z.infer<typeof updateNotificationPreferencesSchema>;
+
 /** SSO provider response (client secret masked) */
 export const ssoProviderResponseSchema = z.object({
   id: z.string().uuid(),

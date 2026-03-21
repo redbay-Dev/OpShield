@@ -2,6 +2,73 @@
 
 All notable changes to OpShield are documented here.
 
+## [Unreleased] — Phase 12: Platform Admin Completion, Email Templates, Auth Prep
+
+### Added
+
+#### Notification Preferences
+- **`notification_preferences` table**: Per-user email preference control (billing, support, product updates)
+- **`GET/PATCH /api/v1/me/notification-preferences`**: Authenticated endpoints for users to read/update their email preferences
+- **`shouldSendEmail(userId, category)` utility**: Checks user preferences before sending non-critical emails (critical emails like payment-failed and suspension always bypass)
+- **DB migration**: `0006_notification_preferences.sql`
+
+#### Missing Email Templates (3 new)
+- **`trial-ending.hbs`**: "Your trial ends in 3 days" warning with upgrade CTA
+- **`trial-expired.hbs`**: "Trial expired" notice with read-only mode explanation and subscribe CTA
+- **`payment-failed-final.hbs`**: Final payment failure warning with suspension date and payment method update CTA
+- **Send functions**: `sendTrialEndingEmail()`, `sendTrialExpiredEmail()`, `sendPaymentFailedFinalEmail()` added to email service
+
+#### System Health Monitoring
+- **`GET /api/v1/system-health`**: Platform admin endpoint that polls OpShield, SafeSpec (port 3001), Nexum (port 3002) health endpoints + PostgreSQL connectivity in parallel (5s timeout per service)
+- **System Health admin page** (`/admin/system-health`): Status cards with green/red indicators, response times, version info, auto-refreshes every 30 seconds
+- **Navigation**: System Health added to admin sidebar (HeartPulse icon)
+
+#### Revenue Analytics Dashboard
+- **`GET /api/v1/analytics/revenue`**: Platform admin endpoint computing MRR (from subscription items + plans), active tenant count, churn rate (30-day), ARPU, revenue by product, revenue by module, tenant status breakdown
+- **Revenue admin page** (`/admin/revenue`): Stat cards (MRR, Active Tenants, Churn Rate, ARPU), tenant status breakdown, revenue by product table, revenue by module table
+- **Navigation**: Revenue added to admin sidebar (TrendingUp icon)
+
+#### Data Export
+- **`GET /api/v1/tenants/:tenantId/export`**: Platform admin endpoint supporting `type=summary|billing|audit` and `format=json|csv` query params. Returns downloadable files with proper Content-Disposition headers.
+- Summary export includes tenant info, modules, subscription status
+- Billing export includes all invoices as CSV
+- Audit export includes all audit log entries for the tenant as JSON
+
+#### Tenant Danger Zone Actions
+- **`POST /api/v1/tenants/:tenantId/suspend`**: Sets tenant status to suspended, dispatches `tenant.suspended` webhook, sends account-suspended email. Requires reason text. Write access required.
+- **`POST /api/v1/tenants/:tenantId/cancel-subscription`**: Marks subscription for cancellation at period end. Requires reason text. Write access required.
+- **`POST /api/v1/tenants/:tenantId/schedule-deletion`**: Sets tenant status to cancelled with `deletedAt` 90 days out. Requires reason + slug confirmation. Delete access (super_admin) required.
+- **Danger Zone tab**: New tab on tenant detail page with red-styled action cards and confirmation dialogs
+
+#### Impersonation
+- **`impersonation_tokens` table**: Stores SHA-256 hashed impersonation tokens with 30-minute expiry, admin user, tenant, product, reason
+- **`POST /api/v1/impersonate`**: Generate impersonation token with redirect URL to product. Write access required. Audit logged.
+- **`DELETE /api/v1/impersonate`**: Revoke an active impersonation token. Audit logged.
+- **`GET /api/v1/impersonate/validate`**: Service-key authenticated endpoint for products to validate impersonation tokens and get tenant/admin info
+- **DB migration**: `0007_impersonation_tokens.sql`
+
+#### Auth Migration Prep (OpShield-side)
+- **`GET /api/auth/authorize`**: SSO authorize endpoint that returns user info + allowlisted callback URL for the requested product. Returns 401 if no session (client handles login redirect). Validates product param via Zod enum — no user-controlled redirects.
+- **`POST /api/v1/me/logout-everywhere`**: Dispatches `session.revoked` webhook to all products for global logout
+- **`session.revoked` webhook event**: Added to webhook service, dispatched to both SafeSpec and Nexum on global logout
+
+### Tests
+- **6 new route test files**: system-health, analytics, tenant-actions, impersonation, export, me (notification prefs + logout)
+- **3 new email template tests**: trial-ending, trial-expired, payment-failed-final rendering
+- **All 198 tests passing across 30 test files (4 packages)**
+
+### Decisions
+- DEC-041: Impersonation uses opaque SHA-256 tokens (not JWTs) since products don't validate JWTs yet — products call back to OpShield to validate
+- DEC-042: Auth authorize endpoint returns JSON (not redirect) to avoid server-side open redirect concerns flagged by Semgrep
+- DEC-043: Revenue analytics computed from existing subscription_items + plans tables (no new metrics infrastructure)
+- DEC-044: Notification preferences are opt-out — defaults are all true, critical emails always bypass
+
+### Next Steps (Priority Order)
+1. **Support Hub** (docs/06) — DB schema (tickets, messages), API routes, email processing, admin UI
+2. **Tenant Self-Service Portal** — Account settings, billing management for end users
+3. **Auth Migration Phase 2** — Products implement callback handler to accept OpShield JWTs
+4. **E2E tests** — Playwright tests for sign-up flow, admin dashboard, SSO
+
 ## [Unreleased] — Phase 11: Half-Built Feature Completion
 
 ### Added

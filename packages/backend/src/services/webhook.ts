@@ -14,7 +14,8 @@ type WebhookEvent =
   | "tenant.suspended"
   | "tenant.cancelled"
   | "tenant.reactivated"
-  | "user_count.updated";
+  | "user_count.updated"
+  | "session.revoked";
 
 type ProductId = "nexum" | "safespec";
 
@@ -222,6 +223,27 @@ export function dispatchWebhook(
  * Dispatch a webhook to a specific known product.
  * Fire-and-forget — used when the target product is already known (e.g., usage reporting).
  */
+/**
+ * Dispatch session.revoked webhook to ALL products (not tenant-scoped).
+ * Used for global logout.
+ */
+export function dispatchSessionRevokedWebhook(
+  userId: string,
+): void {
+  const products: ProductId[] = ["nexum", "safespec"];
+  void (async () => {
+    try {
+      await Promise.allSettled(
+        products.map((productId) =>
+          sendWebhook(productId, "session.revoked", "global", { userId, revokedAt: new Date().toISOString() }),
+        ),
+      );
+    } catch {
+      // Silent failure in v1
+    }
+  })();
+}
+
 export function dispatchWebhookToProduct(
   productId: ProductId,
   event: WebhookEvent,

@@ -54,6 +54,7 @@ import {
 import { BillingTab } from "./billing-tab.js";
 import { ProvisioningTab } from "./provisioning-tab.js";
 import { SsoTab } from "./sso-tab.js";
+import { DangerZoneTab } from "./danger-zone-tab.js";
 
 const STATUS_VARIANT: Record<
   string,
@@ -281,6 +282,7 @@ export function TenantDetailPage(): React.JSX.Element {
           <TabsTrigger value="billing">Billing</TabsTrigger>
           <TabsTrigger value="provisioning">Provisioning</TabsTrigger>
           <TabsTrigger value="sso">SSO</TabsTrigger>
+          <TabsTrigger value="danger">Danger Zone</TabsTrigger>
         </TabsList>
 
         <TabsContent value="info" className="space-y-4">
@@ -630,6 +632,13 @@ export function TenantDetailPage(): React.JSX.Element {
         </TabsContent>
         <TabsContent value="sso">
           <SsoTab tenantId={tenantId ?? ""} />
+        </TabsContent>
+        <TabsContent value="danger">
+          <DangerZoneTab
+            tenantId={tenantId ?? ""}
+            tenantSlug={tenant?.slug ?? ""}
+            tenantStatus={tenant?.status ?? ""}
+          />
         </TabsContent>
       </Tabs>
     </div>
