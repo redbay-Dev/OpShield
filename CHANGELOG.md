@@ -2,6 +2,57 @@
 
 All notable changes to OpShield are documented here.
 
+## [Unreleased] — Phase 10: Public Website & Self-Service Sign-Up
+
+### Added
+- **Landing page** (`/`): Public marketing page with hero, product cards (SafeSpec + Nexum), platform features (SSO, billing, provisioning), and call-to-action sections
+- **Pricing page** (`/pricing`): Dynamic pricing display fetched from `GET /api/v1/plans` endpoint, monthly/annual toggle, plan tier cards with features, flat add-on module table, bundle discount explanation
+- **Self-service sign-up wizard** (`/signup`): 4-step flow — account creation (Better Auth), 2FA setup (TOTP), company + module selection, order review with Stripe Checkout redirect
+- **Public plans API**: `GET /api/v1/plans` — unauthenticated endpoint returning all active plans for pricing page
+- **Slug availability check**: `GET /api/v1/signup/check-slug?slug=xxx` — authenticated endpoint for live slug validation during sign-up
+- **Self-service checkout**: `POST /api/v1/signup/checkout` — authenticated endpoint that creates tenant (onboarding), adds modules, creates Stripe customer, initiates Stripe Checkout Session, returns checkout URL
+- **Checkout webhook enhancement**: `checkout.session.completed` handler now upserts local subscription + subscription item records and triggers `provisionTenant()` for new sign-ups (onboarding → active)
+- **`requireAuth` middleware**: Auth-only guard (no admin check) for endpoints accessible to any logged-in user
+- **`determineCouponId` utility**: Extracted from subscriptions route to `services/billing-utils.ts` — shared by admin subscription creation and self-service checkout
+- **Public layout**: Marketing layout with sticky header, nav links, CTA buttons, footer — adapts for mobile via Sheet nav
+- **Signup layout**: Step-progress indicator (Account → Security → Company → Review) with SignupProvider context
+- **Signup context**: React context sharing state across sign-up steps (account, 2FA, company details, module selections, billing interval)
+- **Checkout result pages**: `/signup/success` (confirmation with provisioning status) and `/signup/cancelled` (retry option)
+- **Frontend hooks**: `usePlans`, `useCheckSlug`, `useCheckout` React Query hooks for signup flow
+- **shadcn components**: Added checkbox and radio-group for module/tier selection
+- **Signup schemas**: `signupCheckoutSchema`, `signupModuleSelectionSchema`, `publicPlanResponseSchema`, `checkSlugQuerySchema` in shared package
+
+### Module selection features
+- Tiered module selection with radio buttons (SafeSpec WHS/HVA, Nexum Core)
+- Flat add-on selection with checkboxes (Nexum optional modules, Fleet Maintenance)
+- Dependency enforcement in UI: Fleet Maintenance disabled without HVA, Nexum Compliance disabled without SafeSpec, Nexum optional modules hidden without Core
+- Live pricing calculation with bundle discount display (10% for 2 products, 15% for 3+ modules)
+- Monthly/annual billing toggle with "save 2 months" badge
+
+### Decisions
+- DEC-036: Tenant created at checkout initiation (onboarding status), activated by Stripe webhook after payment
+- DEC-037: Stripe Checkout Session (not direct subscription) for self-service — needed to collect payment method from new customers
+
+### Tests
+- Signup route auth guard tests (GET /plans public, GET /check-slug auth, POST /checkout auth)
+- Signup schema validation tests (valid input, empty modules, invalid slug, invalid interval, invalid email)
+- All 117 tests passing across 19 test files (4 packages)
+
+### Still Missing
+- **Support Hub** — No schema, routes, services, or UI (spec: `docs/06-SUPPORT-SYSTEM.md`)
+- **Email/Notifications** — No SMTP service, templates, or queue (spec: `docs/08-NOTIFICATIONS-EMAIL.md`)
+- **Tenant Self-Service Portal** — No account settings, billing portal, or invite flow for end users post-signup
+- **SSO Provider Config** — `tenant_sso_providers` table exists but no routes or UI to configure per-tenant Azure AD
+- **Advanced Platform Admin** — Missing: impersonation, audit log analytics, system health dashboard
+- **Orphan tenant cleanup** — Onboarding tenants that never complete checkout should be cleaned up (deferred)
+
+### Next Steps (Priority Order)
+1. **Email/Notifications** (docs/08) — SMTP service, template engine, welcome email, billing alerts
+2. **Support Hub** (docs/06) — DB schema (tickets, messages), API routes, email processing, admin UI
+3. **Tenant Self-Service Portal** — Account settings, billing management for end users
+4. **SSO Provider Config UI** — Routes + admin UI for per-tenant Azure AD configuration
+5. **SafeSpec webhook handler** — Implement `tenant.created` handler in SafeSpec backend
+
 ## [Unreleased] — Phase 9: Polish & Admin Tooling
 
 ### Added

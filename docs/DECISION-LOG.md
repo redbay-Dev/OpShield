@@ -262,4 +262,18 @@ Every architectural, product, and workflow decision is recorded here with ration
 **Rationale:** Synchronous provisioning in the webhook handler would require long timeouts and risk false negatives on network issues. The callback pattern gives products time to complete migrations and provides explicit success/failure reporting with error details.
 **Alternatives considered:** Long-polling the webhook response (fragile, timeout-prone); OpShield polls product status endpoints (requires products to expose new APIs); fire-and-forget with no tracking (no visibility into failures).
 
+### DEC-036: Tenant created at checkout initiation, activated by Stripe webhook
+**Date:** 2026-03-21
+**Context:** Self-service sign-up needs to create a tenant, add modules, and initiate Stripe Checkout. The tenant must exist before Checkout to serve as the Stripe customer metadata reference, but should not be active until payment succeeds.
+**Decision:** Tenant is created with status `"onboarding"` when the user clicks "Proceed to Payment" (`POST /signup/checkout`). Modules are added, Stripe customer is created, and a Checkout Session is initiated. The `checkout.session.completed` webhook flips the tenant to `"active"`, creates local subscription/item records from the Stripe subscription, and triggers provisioning. Orphan onboarding tenants (never completed checkout) can be cleaned up later.
+**Rationale:** Creating the tenant before payment is necessary because Stripe needs a customer ID (stored on tenant) and line items need plans linked to modules (stored in tenantModules). The `"onboarding"` status ensures no provisioning happens prematurely. Webhook-driven activation is reliable since Stripe guarantees delivery.
+**Alternatives considered:** Create tenant after payment in webhook (would need to reconstruct all module selections from Stripe metadata — fragile); two-phase with temp session storage (adds complexity for no benefit); create everything in the webhook handler (Checkout Sessions don't carry enough metadata).
+
+### DEC-037: Stripe Checkout Session for self-service (not direct subscription)
+**Date:** 2026-03-21
+**Context:** The existing admin flow creates Stripe subscriptions directly via `stripe.subscriptions.create()` with `payment_behavior: "default_incomplete"`. This works because admin-created tenants don't need to provide a payment method through the UI. Self-service sign-up needs the customer to enter their card details.
+**Decision:** Self-service sign-up uses Stripe Checkout Sessions (`stripe.checkout.sessions.create()` with `mode: "subscription"`), which provide a hosted payment page. The `checkout.session.completed` webhook handles subscription activation.
+**Rationale:** Stripe Checkout is the recommended way to collect payment methods for new customers. It handles PCI compliance, card validation, 3D Secure, and mobile optimization. The admin flow retains direct subscription creation since admin-created tenants may have payment methods configured separately.
+**Alternatives considered:** Stripe Elements embedded in our UI (more work, PCI SAQ-A-EP instead of SAQ-A); PaymentIntents with manual flow (complex, reinvents what Checkout provides); always use Checkout for admin too (unnecessary — admins don't enter card details).
+
 ---

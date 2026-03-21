@@ -273,3 +273,56 @@ export const webhookDeliveryResponseSchema = z.object({
 });
 
 export type WebhookDeliveryResponse = z.infer<typeof webhookDeliveryResponseSchema>;
+
+// ── Self-Service Sign-Up Schemas ──────────────────────────────────────
+
+/** Module selection for sign-up checkout */
+export const signupModuleSelectionSchema = z.object({
+  productId: z.enum(["safespec", "nexum"]),
+  moduleId: z.string().min(1).max(50),
+  tier: z.string().min(1).max(50),
+});
+
+export type SignupModuleSelection = z.infer<typeof signupModuleSelectionSchema>;
+
+/** Self-service checkout request */
+export const signupCheckoutSchema = z.object({
+  companyName: z.string().min(2).max(255),
+  companySlug: z
+    .string()
+    .min(2)
+    .max(100)
+    .regex(/^[a-z0-9-]+$/, "Slug must be lowercase alphanumeric with hyphens"),
+  billingEmail: z.email(),
+  billingInterval: z.enum(["monthly", "annual"]),
+  modules: z.array(signupModuleSelectionSchema).min(1, "At least one module is required"),
+});
+
+export type SignupCheckoutInput = z.infer<typeof signupCheckoutSchema>;
+
+/** Slug availability check */
+export const checkSlugQuerySchema = z.object({
+  slug: z
+    .string()
+    .min(2)
+    .max(100)
+    .regex(/^[a-z0-9-]+$/, "Slug must be lowercase alphanumeric with hyphens"),
+});
+
+export type CheckSlugQuery = z.infer<typeof checkSlugQuerySchema>;
+
+/** Public plan response (for pricing page) */
+export const publicPlanResponseSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  productId: z.string(),
+  moduleId: z.string(),
+  tier: z.string(),
+  basePrice: z.string(),
+  includedUsers: z.number().int(),
+  perUserPrice: z.string(),
+  billingInterval: z.string(),
+  features: z.array(z.string()),
+});
+
+export type PublicPlanResponse = z.infer<typeof publicPlanResponseSchema>;
