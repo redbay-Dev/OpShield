@@ -14,7 +14,12 @@ import {
   addModule,
   updateModule,
   removeModule,
+  fetchProvisioningStatus,
+  provisionTenant,
+  retryProvisioning,
   type TenantListParams,
+  type ProvisionTenantInput,
+  type RetryProvisioningInput,
 } from "@frontend/api/tenants.js";
 
 export function useTenants(params?: TenantListParams) {
@@ -102,6 +107,44 @@ export function useRemoveModule(tenantId: string) {
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: ["tenants", tenantId, "entitlements"],
+      });
+    },
+  });
+}
+
+// ── Provisioning ──
+
+export function useProvisioningStatus(tenantId: string) {
+  return useQuery({
+    queryKey: ["tenants", tenantId, "provisioning"],
+    queryFn: () => fetchProvisioningStatus(tenantId),
+    enabled: Boolean(tenantId),
+  });
+}
+
+export function useProvisionTenant(tenantId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data?: ProvisionTenantInput) =>
+      provisionTenant(tenantId, data),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["tenants", tenantId, "provisioning"],
+      });
+    },
+  });
+}
+
+export function useRetryProvisioning(tenantId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: RetryProvisioningInput) =>
+      retryProvisioning(tenantId, data),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["tenants", tenantId, "provisioning"],
       });
     },
   });

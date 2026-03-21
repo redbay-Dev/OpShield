@@ -52,6 +52,7 @@ import {
   NEXUM_MODULES,
 } from "@opshield/shared/constants";
 import { BillingTab } from "./billing-tab.js";
+import { ProvisioningTab } from "./provisioning-tab.js";
 
 const STATUS_VARIANT: Record<
   string,
@@ -277,6 +278,7 @@ export function TenantDetailPage(): React.JSX.Element {
               : ""}
           </TabsTrigger>
           <TabsTrigger value="billing">Billing</TabsTrigger>
+          <TabsTrigger value="provisioning">Provisioning</TabsTrigger>
         </TabsList>
 
         <TabsContent value="info" className="space-y-4">
@@ -619,6 +621,10 @@ export function TenantDetailPage(): React.JSX.Element {
 
         <TabsContent value="billing">
           <BillingTab tenantId={tenantId ?? ""} />
+        </TabsContent>
+
+        <TabsContent value="provisioning">
+          <ProvisioningTab tenantId={tenantId ?? ""} />
         </TabsContent>
       </Tabs>
     </div>

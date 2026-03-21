@@ -7,6 +7,7 @@ import { tenantModules } from "../db/schema/tenants.js";
 
 /** Webhook event types that OpShield dispatches to products */
 type WebhookEvent =
+  | "tenant.created"
   | "module.activated"
   | "module.suspended"
   | "module.cancelled"
@@ -106,6 +107,87 @@ async function sendWebhook(
   } catch {
     // Delivery logging failure is non-critical
   }
+}
+
+/** Result from an awaitable provisioning webhook send */
+export interface ProvisioningWebhookResult {
+  deliveryId: string;
+  httpStatus: number | null;
+  error: string | null;
+}
+
+/**
+ * Send a provisioning webhook and return the result (awaitable, not fire-and-forget).
+ * Used by the provisioning service to track delivery status.
+ */
+export async function sendProvisioningWebhook(
+  productId: ProductId,
+  tenantId: string,
+  data: Record<string, unknown>,
+): Promise<ProvisioningWebhookResult> {
+  const webhookConfig = getWebhookConfig(productId);
+  const deliveryId = randomUUID();
+
+  if (!webhookConfig.secret || !webhookConfig.url) {
+    return { deliveryId, httpStatus: null, error: "Webhook not configured for product" };
+  }
+
+  const payload = {
+    id: deliveryId,
+    event: "tenant.created" as const,
+    tenantId,
+    timestamp: new Date().toISOString(),
+    data,
+  };
+
+  const body = JSON.stringify(payload);
+  const timestamp = Math.floor(Date.now() / 1000);
+  const signature = signPayload(body, webhookConfig.secret, timestamp);
+
+  let httpStatus: number | null = null;
+  let error: string | null = null;
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10_000);
+
+    const response = await fetch(webhookConfig.url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-OpShield-Signature": signature,
+        "X-OpShield-Timestamp": String(timestamp),
+        "X-OpShield-Event": "tenant.created",
+      },
+      body,
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+    httpStatus = response.status;
+
+    if (!response.ok) {
+      error = `HTTP ${response.status}: ${await response.text().catch(() => "unknown")}`;
+    }
+  } catch (err) {
+    error = err instanceof Error ? err.message : "Unknown error";
+  }
+
+  // Log delivery
+  try {
+    await db.insert(webhookDeliveries).values({
+      productId,
+      eventType: "tenant.created",
+      tenantId,
+      httpStatus,
+      error,
+      payload: payload as unknown as Record<string, unknown>,
+    });
+  } catch {
+    // Delivery logging failure is non-critical
+  }
+
+  return { deliveryId, httpStatus, error };
 }
 
 /**

@@ -248,4 +248,18 @@ Every architectural, product, and workflow decision is recorded here with ration
 **Rationale:** Follows Stripe's proven webhook signature scheme — well-documented, easy to implement in any language, includes timestamp to prevent replay attacks. Per-product secrets limit blast radius of a key compromise.
 **Alternatives considered:** Shared secret across all products (key compromise affects all products); asymmetric signatures with RSA/EdDSA (more complex verification, unnecessary when we control both ends); IP allowlisting (fragile, doesn't work in dev).
 
+### DEC-034: Products self-provision via webhook — OpShield never connects to product databases
+**Date:** 2026-03-21
+**Context:** When a tenant is created and modules assigned, the product backends (SafeSpec, Nexum) need to create their tenant schemas. OpShield needs a way to trigger this.
+**Decision:** OpShield dispatches `tenant.created` webhooks to product backends. Products handle schema creation internally and call back to OpShield's `/provisioning-callback` endpoint to confirm success or failure. OpShield never connects to product databases directly.
+**Rationale:** Each product already has its own `provisionTenantSchema()` function (Nexum already handles the webhook). Direct DB access would create tight coupling and require OpShield to understand product-specific schema migration logic. Webhook-based provisioning keeps products autonomous and allows them to evolve their schema independently.
+**Alternatives considered:** OpShield connects to product DBs and runs migrations directly (tight coupling, security risk, requires product-specific knowledge); shared migration runner (complex, fragile); manual provisioning (doesn't scale).
+
+### DEC-035: Webhook 200 means "received", not "provisioned" — async callback required
+**Date:** 2026-03-21
+**Context:** Schema provisioning can take seconds or fail asynchronously. A 200 HTTP response from the webhook endpoint only means the product received the request, not that provisioning succeeded.
+**Decision:** OpShield tracks provisioning status per product (pending → dispatched → success/failed). After dispatching the webhook, status is "dispatched". Products must call `POST /tenants/:tenantId/provisioning-callback` with their service API key to report the final result. Failed provisioning can be retried from the admin UI.
+**Rationale:** Synchronous provisioning in the webhook handler would require long timeouts and risk false negatives on network issues. The callback pattern gives products time to complete migrations and provides explicit success/failure reporting with error details.
+**Alternatives considered:** Long-polling the webhook response (fragile, timeout-prone); OpShield polls product status endpoints (requires products to expose new APIs); fire-and-forget with no tracking (no visibility into failures).
+
 ---

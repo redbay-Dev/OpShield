@@ -171,6 +171,54 @@ export const subscriptionResponseSchema = z.object({
 
 export type SubscriptionResponse = z.infer<typeof subscriptionResponseSchema>;
 
+/** Provisioning status values */
+export const provisioningStatusValues = [
+  "pending",
+  "dispatched",
+  "success",
+  "failed",
+] as const;
+
+/** Provisioning status response per product */
+export const provisioningStatusSchema = z.object({
+  id: z.string().uuid(),
+  tenantId: z.string().uuid(),
+  productId: z.string(),
+  status: z.enum(provisioningStatusValues),
+  attempts: z.number().int().min(0),
+  lastError: z.string().nullable(),
+  provisionedAt: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export type ProvisioningStatus = z.infer<typeof provisioningStatusSchema>;
+
+/** Request body for triggering provisioning */
+export const provisionTenantRequestSchema = z.object({
+  ownerUserId: z.string().optional(),
+  ownerEmail: z.email().optional(),
+  ownerName: z.string().optional(),
+});
+
+export type ProvisionTenantRequest = z.infer<typeof provisionTenantRequestSchema>;
+
+/** Callback from product backends confirming provisioning result */
+export const provisioningCallbackSchema = z.object({
+  productId: z.enum(["safespec", "nexum"]),
+  success: z.boolean(),
+  error: z.string().optional(),
+});
+
+export type ProvisioningCallbackInput = z.infer<typeof provisioningCallbackSchema>;
+
+/** Retry provisioning for a specific product */
+export const retryProvisioningSchema = z.object({
+  productId: z.enum(["safespec", "nexum"]),
+});
+
+export type RetryProvisioningInput = z.infer<typeof retryProvisioningSchema>;
+
 /** Usage report submitted by product backends */
 export const usageReportSchema = z.object({
   tenantId: z.string().uuid(),

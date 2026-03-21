@@ -2,6 +2,35 @@
 
 All notable changes to OpShield are documented here.
 
+## [Unreleased] — Phase 8: Tenant Provisioning
+
+### Added
+- **Tenant provisioning service**: Dispatches `tenant.created` webhooks to product backends (SafeSpec, Nexum) with full tenant/module payload, tracks provisioning status per product, supports retry on failure
+- **`tenant_provisioning` table**: Tracks per-product provisioning status (pending/dispatched/success/failed), attempt count, error details, and provisioned timestamp — unique constraint on (tenant_id, product_id)
+- **Provisioning API routes**: `POST /tenants/:tenantId/provision` (trigger), `GET /tenants/:tenantId/provisioning-status` (check), `POST /tenants/:tenantId/retry-provisioning` (retry failed), `POST /tenants/:tenantId/provisioning-callback` (product reports result via service key)
+- **Awaitable webhook send**: `sendProvisioningWebhook()` returns delivery result instead of fire-and-forget, enabling status tracking
+- **Provisioning UI tab**: Admin tenant detail page now has a Provisioning tab showing per-product cards with status badge, attempt count, error display, and retry button
+- **Shared schemas**: `provisioningStatusSchema`, `provisionTenantRequestSchema`, `provisioningCallbackSchema`, `retryProvisioningSchema`
+- **Frontend hooks**: `useProvisioningStatus`, `useProvisionTenant`, `useRetryProvisioning`
+- **DB migration**: `0004_tenant_provisioning.sql`
+- **Tests**: Route auth guard tests and schema validation tests
+
+### Decisions
+- DEC-034: Products self-provision via webhook — OpShield never connects to product databases
+- DEC-035: 200 from webhook = "received", not "provisioned" — products call back to confirm
+
+### Still Missing
+- SafeSpec does not yet handle the `tenant.created` webhook event (Nexum already does)
+- Automatic provisioning trigger on tenant creation (currently manual via admin UI)
+- Provisioning status polling/refresh in the UI (currently requires tab reload)
+- Email notification to admin on provisioning failure
+
+### Next Steps
+- Implement `tenant.created` webhook handler in SafeSpec (see `docs/03-INTEGRATION-ARCHITECTURE.md`)
+- Wire up automatic provisioning dispatch after tenant creation + module assignment
+- Run migration `0004_tenant_provisioning.sql` against the database
+- Consider auto-polling provisioning status in the UI while status is "dispatched"
+
 ## [Unreleased] — Phase 7: Outbound Webhooks + Usage Reporting
 
 ### Added

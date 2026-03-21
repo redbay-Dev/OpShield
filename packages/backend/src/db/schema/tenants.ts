@@ -106,6 +106,28 @@ export const serviceApiKeys = pgTable("service_api_keys", {
 });
 
 /**
+ * Provisioning status for each product per tenant.
+ * Tracks whether each product has successfully set up its tenant schema.
+ */
+export const tenantProvisioning = pgTable("tenant_provisioning", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id")
+    .notNull()
+    .references(() => tenants.id),
+  productId: varchar("product_id", { length: 50 }).notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("pending"),
+  attempts: integer("attempts").notNull().default(0),
+  lastError: text("last_error"),
+  provisionedAt: timestamp("provisioned_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
  * Audit log for platform-level actions.
  * Tracks tenant creation, module changes, billing events, admin actions.
  */

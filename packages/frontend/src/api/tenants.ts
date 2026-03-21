@@ -97,4 +97,75 @@ export function removeModule(
   return apiDelete(`/tenants/${tenantId}/modules/${moduleId}`);
 }
 
-export type { PaginatedResponse, TenantListParams, ModuleResponse };
+// ── Provisioning ──
+
+interface ProvisioningStatusResponse {
+  id: string;
+  tenantId: string;
+  productId: string;
+  status: "pending" | "dispatched" | "success" | "failed";
+  attempts: number;
+  lastError: string | null;
+  provisionedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface ProvisionTenantInput {
+  ownerUserId?: string;
+  ownerEmail?: string;
+  ownerName?: string;
+}
+
+interface ProvisionResult {
+  productId: string;
+  status: string;
+  error: string | null;
+}
+
+interface ProvisionResponse {
+  results: ProvisionResult[];
+}
+
+interface RetryProvisioningInput {
+  productId: "safespec" | "nexum";
+}
+
+export function fetchProvisioningStatus(
+  tenantId: string,
+): Promise<ProvisioningStatusResponse[]> {
+  return apiGet<ProvisioningStatusResponse[]>(
+    `/tenants/${tenantId}/provisioning-status`,
+  );
+}
+
+export function provisionTenant(
+  tenantId: string,
+  data?: ProvisionTenantInput,
+): Promise<ProvisionResponse> {
+  return apiPost<ProvisionResponse>(
+    `/tenants/${tenantId}/provision`,
+    data ?? {},
+  );
+}
+
+export function retryProvisioning(
+  tenantId: string,
+  data: RetryProvisioningInput,
+): Promise<ProvisionResult> {
+  return apiPost<ProvisionResult>(
+    `/tenants/${tenantId}/retry-provisioning`,
+    data,
+  );
+}
+
+export type {
+  PaginatedResponse,
+  TenantListParams,
+  ModuleResponse,
+  ProvisioningStatusResponse,
+  ProvisionTenantInput,
+  ProvisionResponse,
+  ProvisionResult,
+  RetryProvisioningInput,
+};

@@ -1,6 +1,6 @@
 # 02 — Tenant Provisioning
 
-> How OpShield creates tenants, provisions product databases, seeds module-specific data, and manages the tenant lifecycle.
+> How OpShield creates tenants, dispatches provisioning webhooks to products, tracks status, and manages the tenant lifecycle.
 
 ## Overview
 
@@ -8,10 +8,15 @@ When a customer signs up via the OpShield public website, OpShield orchestrates 
 
 1. Creates the tenant record in OpShield's database
 2. Creates a Stripe customer and subscription
-3. Provisions database schemas in the relevant product database(s)
-4. Seeds module-specific default data
-5. Sends welcome communications
-6. Redirects the user to their product
+3. Dispatches `tenant.created` webhooks to product backends
+4. Products self-provision their database schemas
+5. Products call back to OpShield to confirm success/failure
+6. Sends welcome communications
+7. Redirects the user to their product
+
+**Key design decision (DEC-034):** OpShield never connects to product databases. Products self-provision via webhook. This keeps products autonomous and avoids tight coupling.
+
+**Key design decision (DEC-035):** A 200 webhook response only means "received" — schema creation is async. Products must call the provisioning callback endpoint to report the final result.
 
 ---
 
@@ -29,48 +34,42 @@ When a customer signs up via the OpShield public website, OpShield orchestrates 
 ┌──────────────────────────────────────────────────────────┐
 │ 2. CREATE TENANT (OpShield Backend)                      │
 │    ─ Validate input (Zod)                                │
-│    ─ Create `tenants` record (status: provisioning)      │
-│    ─ Create `tenant_users` record (role: owner)          │
+│    ─ Create `tenants` record (status: onboarding)        │
 │    ─ Create Stripe customer                              │
 │    ─ Create Stripe subscription (items per module)       │
-│    ─ Create `tenant_products` records                    │
 │    ─ Create `tenant_modules` records                     │
 └──────────────────────┬───────────────────────────────────┘
                        │
                        ▼
 ┌──────────────────────────────────────────────────────────┐
-│ 3. PROVISION PRODUCT DATABASES (async, per product)      │
+│ 3. DISPATCH PROVISIONING WEBHOOKS (per product)          │
 │                                                          │
-│  For SafeSpec (if selected):                             │
-│    ─ Connect to SafeSpec's PostgreSQL                    │
-│    ─ CREATE SCHEMA tenant_{uuid}                         │
-│    ─ Run SafeSpec tenant migration (tables, indexes)     │
-│    ─ Seed data based on active modules:                  │
-│      ─ WHS: default inspection templates, risk matrix    │
-│      ─ HVA: default fatigue rules, SMS templates         │
-│      ─ Both: cross-module defaults                       │
-│    ─ Update tenant_products.status = 'active'            │
-│    ─ Update tenant_products.provisioned_at               │
-│    ─ Update tenant_products.schema_name                  │
+│  OpShield:                                               │
+│    ─ Queries tenant modules grouped by product           │
+│    ─ Upserts `tenant_provisioning` rows (status:         │
+│      dispatched)                                         │
+│    ─ Sends `tenant.created` webhook to each product      │
+│      with payload: { name, plan, modules[], ownerInfo }  │
+│    ─ If webhook delivery fails, marks status: failed     │
 │                                                          │
-│  For Nexum (if selected):                                │
-│    ─ Connect to Nexum's PostgreSQL                       │
-│    ─ CREATE SCHEMA tenant_{uuid}                         │
-│    ─ Run Nexum tenant migration (tables, indexes)        │
-│    ─ Seed data based on enabled modules                  │
-│    ─ Set enabled_modules array in organisation config     │
-│    ─ Update tenant_products.status = 'active'            │
+│  Products (self-provision):                              │
+│    ─ Receive `tenant.created` webhook                    │
+│    ─ Create local tenant record                          │
+│    ─ Run provisionTenantSchema() (CREATE SCHEMA,         │
+│      migrations, seed data)                              │
+│    ─ Call back: POST /tenants/:id/provisioning-callback  │
+│      with { productId, success, error? }                 │
 │                                                          │
-│  If both products:                                       │
-│    ─ Create product_connections record                   │
-│    ─ Generate HMAC API key for inter-product webhooks    │
-│    ─ Register webhook endpoints in both products         │
+│  OpShield updates:                                       │
+│    ─ tenant_provisioning.status = success|failed         │
+│    ─ tenant_provisioning.provisioned_at (on success)     │
+│    ─ Audit log entry                                     │
 └──────────────────────┬───────────────────────────────────┘
                        │
                        ▼
 ┌──────────────────────────────────────────────────────────┐
 │ 4. POST-PROVISIONING                                     │
-│    ─ Update tenants.subscription_status = 'active'       │
+│    ─ Update tenants.status = 'active'                    │
 │      (or 'trial' if trial period)                        │
 │    ─ Send welcome email with login URL(s)                │
 │    ─ Create audit log entry                              │
@@ -160,43 +159,58 @@ After initial sign-up, tenants can add products or modules through the OpShield 
 
 ## Provisioning API Endpoints
 
-### Internal API (OpShield Backend)
+### Platform Admin API (authenticated via session)
 
 ```
-POST /api/internal/tenants
-  Body: { company_name, abn, contact, products: [{ id, plan, modules: [...] }] }
-  Response: { tenant_id, status: "provisioning" }
+POST /api/v1/tenants/:tenantId/provision
+  Body: { ownerUserId?, ownerEmail?, ownerName? }
+  → Dispatches tenant.created webhooks to all products with modules
+  → Response: { results: [{ productId, status, error }] }
 
-GET /api/internal/tenants/:id/provisioning-status
-  Response: { status, products: [{ id, status, provisioned_at }] }
+GET /api/v1/tenants/:tenantId/provisioning-status
+  → Returns per-product provisioning status
+  → Response: [{ id, tenantId, productId, status, attempts, lastError, provisionedAt, ... }]
 
-POST /api/internal/tenants/:id/products
-  Body: { product_id, plan, modules: [...] }
-  → Add product to existing tenant
-
-POST /api/internal/tenants/:id/modules
-  Body: { product_id, module_id, plan }
-  → Add module to existing product subscription
-
-DELETE /api/internal/tenants/:id/modules/:moduleId
-  → Cancel module (soft — marks as cancelled)
-
-POST /api/internal/tenants/:id/suspend
-  → Suspend tenant (payment failure)
-
-POST /api/internal/tenants/:id/reactivate
-  → Reactivate after payment
+POST /api/v1/tenants/:tenantId/retry-provisioning
+  Body: { productId: "safespec" | "nexum" }
+  → Re-dispatches webhook for a failed product
 ```
 
-### Product-Facing API
+### Product-Facing API (authenticated via service API key)
 
 ```
-GET /api/tenants/:id/entitlements
+POST /api/v1/tenants/:tenantId/provisioning-callback
+  Header: x-product-api-key: <key>
+  Body: { productId: "safespec" | "nexum", success: boolean, error?: string }
+  → Product reports provisioning result back to OpShield
+
+GET /api/v1/tenants/:tenantId/entitlements
   → Returns full product + module entitlement map (see doc 01)
 
 POST /api/webhooks/stripe
   → Stripe webhook receiver (payment events)
 ```
+
+### Webhook Payload Contract (tenant.created)
+
+```json
+{
+  "id": "<delivery-uuid>",
+  "event": "tenant.created",
+  "tenantId": "<opshield-tenant-id>",
+  "timestamp": "<iso>",
+  "data": {
+    "name": "Acme Corp",
+    "plan": "active",
+    "modules": ["nexum-core", "nexum-invoicing"],
+    "ownerUserId": "<user-id>",
+    "ownerEmail": "owner@acme.com",
+    "ownerName": "John Doe"
+  }
+}
+```
+
+The `modules` array is filtered to only include modules for the target product.
 
 ---
 
@@ -219,21 +233,17 @@ If a tenant buys both SafeSpec and Nexum but one fails:
 
 ---
 
-## Database Connections
+## Database Architecture
 
-OpShield needs database connections to provision schemas in product databases:
+OpShield only connects to its own database. Products provision their own schemas.
 
 ```
 OpShield DB (opshield_dev) — direct access, owns this DB
-SafeSpec DB (safespec_dev) — provisioning-only connection (CREATE SCHEMA, run migrations)
-Nexum DB (nexum_dev) — provisioning-only connection (CREATE SCHEMA, run migrations)
+SafeSpec DB (safespec_dev) — owned by SafeSpec, provisioned by SafeSpec on webhook
+Nexum DB (nexum_dev) — owned by Nexum, provisioned by Nexum on webhook
 ```
 
-**Security:** The provisioning connection uses a dedicated database role with limited permissions:
-- `CREATE SCHEMA`
-- `CREATE TABLE` (within new schemas only)
-- `INSERT` (for seed data only)
-- No `DROP`, no `DELETE`, no access to existing tenant schemas
+**Per DEC-034:** OpShield never connects to product databases. Products self-provision via the `tenant.created` webhook and call back to confirm.
 
 ---
 
