@@ -10,6 +10,7 @@ import { LoginPage } from "@frontend/pages/auth/login.js";
 import { SignUpPage } from "@frontend/pages/auth/sign-up.js";
 import { TwoFactorSetupPage } from "@frontend/pages/auth/two-factor-setup.js";
 import { TwoFactorVerifyPage } from "@frontend/pages/auth/two-factor-verify.js";
+import { CompleteSetupPage } from "@frontend/pages/auth/complete-setup.js";
 import { DashboardPage } from "@frontend/pages/admin/dashboard.js";
 import { TenantListPage } from "@frontend/pages/admin/tenants/tenant-list.js";
 import { TenantDetailPage } from "@frontend/pages/admin/tenants/tenant-detail.js";
@@ -19,6 +20,7 @@ import { SystemHealthPage } from "@frontend/pages/admin/system-health.js";
 import { RevenuePage } from "@frontend/pages/admin/revenue.js";
 import { SupportTicketsPage } from "@frontend/pages/admin/support-tickets.js";
 import { SupportTicketDetailPage } from "@frontend/pages/admin/support-ticket-detail.js";
+import { AdminManagementPage } from "@frontend/pages/admin/admin-management.js";
 import { LandingPage } from "@frontend/pages/public/landing.js";
 import { PricingPage } from "@frontend/pages/public/pricing.js";
 import { StepAccountPage } from "@frontend/pages/signup/step-account.js";
@@ -48,9 +50,10 @@ export function App(): React.JSX.Element {
         <Route path="auth/2fa-verify" element={<TwoFactorVerifyPage />} />
       </Route>
 
-      {/* 2FA setup requires auth but not admin */}
+      {/* Account setup and 2FA require auth but not admin */}
       <Route element={<ProtectedRoute />}>
         <Route element={<AuthLayout />}>
+          <Route path="auth/complete-setup" element={<CompleteSetupPage />} />
           <Route path="auth/2fa-setup" element={<TwoFactorSetupPage />} />
         </Route>
       </Route>
@@ -104,6 +107,10 @@ export function App(): React.JSX.Element {
             <Route
               path="admin/support/:ticketNumber"
               element={<SupportTicketDetailPage />}
+            />
+            <Route
+              path="admin/admins"
+              element={<AdminManagementPage />}
             />
           </Route>
         </Route>

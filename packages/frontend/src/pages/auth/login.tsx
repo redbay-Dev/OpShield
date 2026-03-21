@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate, useLocation } from "react-router";
+import { Link, useLocation } from "react-router";
 import { Loader2 } from "lucide-react";
 import { Button } from "@frontend/components/ui/button.js";
 import {
@@ -23,10 +23,9 @@ export function LoginPage(): React.JSX.Element {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
   const location = useLocation();
 
-  const from = (location.state as { from?: string } | null)?.from ?? "/account";
+  const from = (location.state as { from?: string } | null)?.from ?? "/admin";
 
   async function handleSubmit(e: FormEvent): Promise<void> {
     e.preventDefault();
@@ -49,7 +48,10 @@ export function LoginPage(): React.JSX.Element {
       return;
     }
 
-    void navigate(from, { replace: true });
+    // Full page navigation ensures cookies are picked up by subsequent requests.
+    // React Router's navigate() can race with cookie storage, causing
+    // ProtectedRoute to see a stale (unauthenticated) session.
+    window.location.href = from;
   }
 
   return (

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
 import { QRCodeSVG } from "qrcode.react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Copy, Check } from "lucide-react";
 import { Button } from "@frontend/components/ui/button.js";
 import {
@@ -27,6 +28,7 @@ export function StepTwoFactorPage(): React.JSX.Element {
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { setTwoFactorComplete } = useSignupContext();
 
   async function handleEnable(e: FormEvent): Promise<void> {
@@ -74,6 +76,7 @@ export function StepTwoFactorPage(): React.JSX.Element {
 
   function handleContinue(): void {
     setTwoFactorComplete(true);
+    void queryClient.invalidateQueries({ queryKey: ["security-status"] });
     void navigate("/signup/company", { replace: true });
   }
 

@@ -12,6 +12,7 @@ import {
   LogOut,
   User,
   Shield,
+  ShieldCheck,
   ChevronDown,
 } from "lucide-react";
 import { Button } from "@frontend/components/ui/button.js";
@@ -47,6 +48,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Support", href: "/admin/support", icon: LifeBuoy },
   { label: "Audit Log", href: "/admin/audit-log", icon: ScrollText },
   { label: "System Health", href: "/admin/system-health", icon: HeartPulse },
+  { label: "Platform Admins", href: "/admin/admins", icon: ShieldCheck },
 ];
 
 const ROLE_LABELS: Record<string, string> = {

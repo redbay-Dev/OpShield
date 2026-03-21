@@ -295,13 +295,17 @@ export async function signupRoutes(app: FastifyInstance): Promise<void> {
         subscription_data: {
           metadata: { tenantId: tenant.id, tenantSlug: companySlug },
         },
-        metadata: { tenantId: tenant.id, userId: authUser.id },
+        metadata: {
+          tenantId: tenant.id,
+          userId: authUser.id,
+          userName: authUser.name,
+        },
       });
 
       // Audit log
       await db.insert(auditLog).values({
         actorId: authUser.id,
-        actorType: "platform_admin",
+        actorType: "user",
         action: "signup.checkout_initiated",
         resourceType: "tenant",
         resourceId: tenant.id,

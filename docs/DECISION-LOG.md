@@ -409,4 +409,46 @@ Every architectural, product, and workflow decision is recorded here with ration
 **Rationale:** Migrations run automatically on startup. Plans exist immediately in any environment. `ON CONFLICT DO NOTHING` makes it idempotent. Admin API allows price changes without new migrations.
 **Alternatives considered:** Seed script (deleted per no-seed-data rule); admin-only creation (requires admin to exist first, chicken-and-egg).
 
+### DEC-057: Bootstrap super_admin via Better Auth API on first boot
+**Date:** 2026-03-22
+**Context:** OpShield needs a super_admin to manage the platform. Previous approach auto-promoted the first signup, which was fragile (broke when stale seed data existed) and couldn't guarantee credentials.
+**Decision:** On first boot with zero valid platform_admins, server creates a default account (`admin@nexum.net.au` / `ChangeMe2026!`) using Better Auth's `signUpEmail` API (proper password hashing). Account is flagged `must_change_password = true`. On first login, the user is forced to change their name, email, and password before proceeding to 2FA setup. Subsequent admins are promoted via `pnpm admin:promote <email>` CLI or by an existing super_admin.
+**Rationale:** Production-ready pattern: predictable default credentials, forced change on first use, no guesswork about which user gets promoted. Using Better Auth's API ensures password hashing is correct. CLI script enables promotion without direct DB access.
+**Alternatives considered:** Auto-promote first signup (fragile, broke with stale data); SQL migration with hardcoded password hash (ties to specific hashing algorithm, breaks if Better Auth changes); env var for admin email (deployment config leak).
+
+### DEC-058: 2FA and setup enforcement at frontend route guard level
+**Date:** 2026-03-22
+**Context:** 2FA was configured in Better Auth but not enforced — users could skip setup and access protected routes. Need to enforce mandatory 2FA for all users.
+**Decision:** Enforce via `ProtectedRoute` component (frontend route guard) rather than backend middleware. Backend provides `GET /me/2fa-status` endpoint. ProtectedRoute checks session + 2FA status and redirects to setup if not enabled.
+**Rationale:** Better Auth already handles the 2FA challenge flow during login (via `onTwoFactorRedirect` callback). The route guard catches the edge case where a user has a session but hasn't completed 2FA setup. Backend middleware enforcement was considered but would block all API calls including the 2FA setup endpoints themselves, creating a deadlock.
+**Alternatives considered:** Backend middleware requiring 2FA on all routes (would block 2FA setup endpoints); requiring 2FA before session creation (Better Auth doesn't support this natively).
+
+### DEC-059: Overage billing via Stripe subscription quantity updates
+**Date:** 2026-03-22
+**Context:** Products report user counts to OpShield. When a tenant exceeds their plan's included users, the excess needs to be billed. Two approaches: real-time quantity updates on the per-user subscription item, or metered billing at period end.
+**Decision:** Real-time quantity updates with proration. When `POST /usage` receives a `user_count` metric, `syncOverageToStripe()` calculates overage (`currentUsers - plan.includedUsers`) and updates the Stripe subscription item quantity. Stripe handles proration automatically.
+**Rationale:** Simpler than metered billing (no usage record aggregation needed at period end). Customers see the charge immediately in their Stripe dashboard. Proration ensures fair billing for mid-period changes.
+**Alternatives considered:** Metered billing (more complex, delayed visibility); manual overage invoicing (not automated).
+
+### DEC-060: Single initial migration over incremental history
+**Date:** 2026-03-22
+**Context:** Previous agent added schema columns directly to the database without generating migrations. The migration history had 11 files, some with schema changes that were only applied directly. On a fresh DB, migrations failed because columns like `must_change_password` were missing.
+**Decision:** Replace all 11 incremental migration files with a single `0000_initial.sql` generated from the current Drizzle schema. Fresh databases get the complete schema in one pass.
+**Rationale:** The incremental history was broken (direct DB edits made it unreliable). A single initial migration is the correct baseline for a project that hasn't shipped to production yet. Once in production, incremental migrations will be maintained properly.
+**Alternatives considered:** Manually patching each missing column into existing migrations (error-prone, doesn't fix the root cause); keeping broken history and adding fixup migrations (accumulates tech debt).
+
+### DEC-061: 2FA detection via two_factor table, not user column
+**Date:** 2026-03-22
+**Context:** The `GET /me/2fa-status` endpoint was reading `user.twoFactorEnabled` to determine if 2FA was enabled. But Better Auth's twoFactor plugin never updates this column — it stores 2FA state by creating a record in the `two_factor` table.
+**Decision:** Check for existence of a `two_factor` record for the user instead of reading the `twoFactorEnabled` column on the user table.
+**Rationale:** Matches Better Auth's actual behaviour. The `twoFactorEnabled` column is effectively unused by Better Auth — it's a schema artifact, not a source of truth.
+**Alternatives considered:** Manually updating `user.twoFactorEnabled` after 2FA setup (fragile, fights the framework); removing the column (breaking change, deferred).
+
+### DEC-062: PreToolUse hook to block destructive DB commands
+**Date:** 2026-03-22
+**Context:** Previous agent repeatedly edited the database directly via `psql` despite explicit rules against it. This broke migration tracking and data integrity.
+**Decision:** Add a PreToolUse hook in `.claude/settings.json` that blocks bash commands containing both a DB client (`psql`/`pg_dump`/`pg_restore`/`pgcli`) AND destructive SQL keywords (`INSERT`/`UPDATE`/`DELETE`/`DROP`/`ALTER`/`TRUNCATE`/`CREATE`/`GRANT`/`REVOKE`). Read-only queries are allowed.
+**Rationale:** CLAUDE.md rules alone weren't sufficient — agents ignored them. A hook provides hard enforcement at the tool level. Read access is preserved for debugging.
+**Alternatives considered:** Blanket block on all psql (too restrictive, prevents debugging); permission deny rules only (don't catch piped commands).
+
 ---

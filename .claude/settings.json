@@ -9,5 +9,20 @@
     "semgrep@claude-plugins-official": true,
     "postman@claude-plugins-official": true,
     "chrome-devtools-mcp@claude-plugins-official": true
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CMD=$(jq -r '.tool_input.command'); echo \"$CMD\" | grep -qiE '^(psql|pg_dump|pg_restore|pgcli)\\b|\\|\\s*(psql|pg_dump|pg_restore|pgcli)\\b|;\\s*(psql|pg_dump|pg_restore|pgcli)\\b|&&\\s*(psql|pg_dump|pg_restore|pgcli)\\b|docker.*(psql|pg_dump|pg_restore|pgcli)\\b' && echo \"$CMD\" | grep -qiE '\\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|CREATE|GRANT|REVOKE)\\b' && echo '{\"decision\":\"block\",\"reason\":\"BLOCKED: Destructive database operations via psql are forbidden. All database changes must go through drizzle-kit migrations.\"}' || true",
+            "timeout": 5,
+            "statusMessage": "Checking for destructive DB commands..."
+          }
+        ]
+      }
+    ]
   }
 }

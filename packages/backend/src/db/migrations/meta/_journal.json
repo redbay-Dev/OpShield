@@ -5,29 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1773971712459,
-      "tag": "0000_nervous_lenny_balinger",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1774038030926,
-      "tag": "0001_eager_impossible_man",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1774339200000,
-      "tag": "0002_stripe_billing_integration",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1774339300000,
-      "tag": "0003_webhook_deliveries",
+      "when": 1774133809940,
+      "tag": "0000_initial",
       "breakpoints": true
     }
   ]

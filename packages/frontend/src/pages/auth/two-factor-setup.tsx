@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router";
+import { useLocation } from "react-router";
 import { QRCodeSVG } from "qrcode.react";
 import { Loader2, Copy, Check } from "lucide-react";
 import { Button } from "@frontend/components/ui/button.js";
@@ -25,7 +25,10 @@ export function TwoFactorSetupPage(): React.JSX.Element {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
-  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Determine where to go after 2FA setup — default to admin dashboard
+  const from = (location.state as { from?: string } | null)?.from ?? "/admin";
 
   async function handleEnable(e: FormEvent): Promise<void> {
     e.preventDefault();
@@ -259,9 +262,11 @@ export function TwoFactorSetupPage(): React.JSX.Element {
           </Button>
           <Button
             className="w-full"
-            onClick={() => void navigate("/admin", { replace: true })}
+            onClick={() => {
+              window.location.href = from;
+            }}
           >
-            Continue to Dashboard
+            Continue
           </Button>
         </CardContent>
       </Card>

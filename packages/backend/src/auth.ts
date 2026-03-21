@@ -4,7 +4,6 @@ import { twoFactor, jwt } from "better-auth/plugins";
 import { eq } from "drizzle-orm";
 import { db } from "./db/client.js";
 import { tenantUsers } from "./db/schema/tenant-users.js";
-import { platformAdmins } from "./db/schema/tenants.js";
 import { config } from "./config.js";
 
 const socialProviders: Record<string, unknown>[] = [];
@@ -52,31 +51,9 @@ export const auth = betterAuth({
     provider: "pg",
   }),
 
-  databaseHooks: {
-    user: {
-      create: {
-        after: async (user) => {
-          // First user to sign up becomes super_admin.
-          // Once any admin exists, this is a no-op.
-          const existingAdmins = await db
-            .select({ id: platformAdmins.id })
-            .from(platformAdmins)
-            .limit(1);
-
-          if (existingAdmins.length === 0) {
-            await db.insert(platformAdmins).values({
-              userId: user.id,
-              role: "super_admin",
-            });
-          }
-        },
-      },
-    },
-  },
-
   emailAndPassword: {
     enabled: true,
-    minPasswordLength: 10,
+    minPasswordLength: 5,
   },
 
   socialProviders:

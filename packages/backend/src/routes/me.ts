@@ -5,6 +5,7 @@ import { platformAdmins, tenants, tenantModules } from "../db/schema/tenants.js"
 import { tenantUsers } from "../db/schema/tenant-users.js";
 import { subscriptions } from "../db/schema/billing.js";
 import { notificationPreferences } from "../db/schema/notification-preferences.js";
+import { user, twoFactor } from "../db/schema/auth.js";
 import { getSession } from "../middleware/auth.js";
 import { requireAuth, type AuthenticatedUser } from "../middleware/require-auth.js";
 import { updateNotificationPreferencesSchema } from "@opshield/shared";
@@ -38,6 +39,64 @@ export async function meRoutes(app: FastifyInstance): Promise<void> {
       },
     };
   });
+
+  // ── 2FA Status — Check if user has 2FA enabled ──
+
+  app.get("/me/2fa-status", async (request, reply) => {
+    const session = await getSession(request);
+
+    if (!session) {
+      void reply.status(401).send({
+        success: false,
+        error: { code: "UNAUTHORIZED", message: "Authentication required" },
+      });
+      return;
+    }
+
+    // Check user flags
+    const [userRow] = await db
+      .select({
+        mustChangePassword: user.mustChangePassword,
+      })
+      .from(user)
+      .where(eq(user.id, session.user.id))
+      .limit(1);
+
+    // Check if a two_factor record exists (Better Auth stores 2FA state here,
+    // not on the user.twoFactorEnabled column)
+    const [tfRecord] = await db
+      .select({ id: twoFactor.id })
+      .from(twoFactor)
+      .where(eq(twoFactor.userId, session.user.id))
+      .limit(1);
+
+    return {
+      success: true,
+      data: {
+        twoFactorEnabled: Boolean(tfRecord),
+        mustChangePassword: userRow?.mustChangePassword === true,
+      },
+    };
+  });
+
+  // ── Force Password Change — Clear the flag after password update ──
+
+  app.post(
+    "/me/complete-setup",
+    { preHandler: [requireAuth] },
+    async (request, reply) => {
+      const { id: userId } = (request as typeof request & { authUser: AuthenticatedUser }).authUser;
+
+      // Just clear the mustChangePassword flag
+      // The actual password change is handled by Better Auth's change-password endpoint
+      await db
+        .update(user)
+        .set({ mustChangePassword: false, updatedAt: new Date() })
+        .where(eq(user.id, userId));
+
+      return reply.send({ success: true, data: null });
+    },
+  );
 
   // ── Global Logout ──
 

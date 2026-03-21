@@ -19,6 +19,8 @@ import {
   sendPaymentReceivedEmail,
   sendPaymentFailedEmail,
   sendAccountSuspendedEmail,
+  sendPlanChangedEmail,
+  sendTrialEndingEmail,
 } from "../services/email.js";
 import { config } from "../config.js";
 
@@ -420,6 +422,15 @@ async function handleSubscriptionUpdated(
 
   const tenantId = await resolveTenantId(customerId);
 
+  // Check for status change before updating
+  const [existingSub] = await db
+    .select({ status: subscriptions.status })
+    .from(subscriptions)
+    .where(eq(subscriptions.stripeSubscriptionId, sub.id))
+    .limit(1);
+
+  const previousStatus = existingSub?.status ?? "unknown";
+
   await db
     .update(subscriptions)
     .set({
@@ -442,8 +453,26 @@ async function handleSubscriptionUpdated(
     action: "subscription.updated",
     resourceType: "subscription",
     resourceId: sub.id,
-    metadata: { tenantId, status: sub.status },
+    metadata: { tenantId, status: sub.status, previousStatus },
   });
+
+  // Send plan changed email if status actually changed
+  if (tenantId && previousStatus !== sub.status) {
+    const [updatedTenant] = await db
+      .select({ name: tenants.name, billingEmail: tenants.billingEmail })
+      .from(tenants)
+      .where(eq(tenants.id, tenantId))
+      .limit(1);
+    if (updatedTenant?.billingEmail) {
+      void sendPlanChangedEmail({
+        to: updatedTenant.billingEmail,
+        companyName: updatedTenant.name,
+        previousPlan: previousStatus,
+        newPlan: sub.status,
+        effectiveDate: new Date().toISOString(),
+      }).catch(() => { /* email failure should not block webhook */ });
+    }
+  }
 }
 
 /**
@@ -511,6 +540,58 @@ async function handleSubscriptionDeleted(
 }
 
 /**
+ * Handle customer.subscription.trial_will_end — send trial ending reminder.
+ * Stripe fires this 3 days before trial ends.
+ */
+async function handleTrialWillEnd(
+  event: Stripe.Event,
+  subData: Stripe.Event.Data.Object,
+): Promise<void> {
+  const sub = subData as unknown as Stripe.Subscription;
+  const customerId = getCustomerId(sub.customer);
+  if (!customerId) return;
+
+  const tenantId = await resolveTenantId(customerId);
+
+  await logBillingEvent({
+    tenantId,
+    eventType: event.type,
+    stripeEventId: event.id,
+    metadata: { subscriptionId: sub.id },
+  });
+
+  if (tenantId) {
+    const [tenant] = await db
+      .select({ name: tenants.name, billingEmail: tenants.billingEmail })
+      .from(tenants)
+      .where(eq(tenants.id, tenantId))
+      .limit(1);
+
+    if (tenant?.billingEmail) {
+      const trialEnd = sub.trial_end
+        ? new Date(sub.trial_end * 1000).toISOString()
+        : new Date().toISOString();
+
+      void sendTrialEndingEmail({
+        to: tenant.billingEmail,
+        companyName: tenant.name,
+        trialEndDate: trialEnd,
+        upgradeUrl: `${config.frontendUrl}/account/billing`,
+      }).catch(() => { /* email failure should not block webhook */ });
+    }
+  }
+
+  await db.insert(auditLog).values({
+    actorId: "stripe",
+    actorType: "system",
+    action: "subscription.trial_ending",
+    resourceType: "subscription",
+    resourceId: sub.id,
+    metadata: { tenantId },
+  });
+}
+
+/**
  * Stripe webhook route — registered at app root level.
  * Needs its own scope for raw body parsing.
  */
@@ -564,6 +645,9 @@ export async function stripeWebhookRoute(app: FastifyInstance): Promise<void> {
           break;
         case "customer.subscription.deleted":
           await handleSubscriptionDeleted(event, event.data.object);
+          break;
+        case "customer.subscription.trial_will_end":
+          await handleTrialWillEnd(event, event.data.object);
           break;
         default:
           app.log.info(`Unhandled Stripe event type: ${event.type}`);

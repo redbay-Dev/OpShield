@@ -264,4 +264,141 @@ export async function tenantActionRoutes(app: FastifyInstance): Promise<void> {
       };
     },
   );
+
+  // ── Reactivate Tenant ──
+  app.post(
+    "/tenants/:tenantId/reactivate",
+    { preHandler: [requirePlatformAdmin, requireWriteAccess] },
+    async (request, reply) => {
+      const paramResult = tenantIdParamSchema.safeParse(request.params);
+      if (!paramResult.success) {
+        void reply.status(400).send({
+          success: false,
+          error: { code: "VALIDATION_ERROR", message: "Invalid tenant ID" },
+        });
+        return;
+      }
+
+      const { tenantId } = paramResult.data;
+      const admin = (request as FastifyRequest & { platformAdmin: PlatformAdminAuth }).platformAdmin;
+
+      const [tenant] = await db
+        .select()
+        .from(tenants)
+        .where(eq(tenants.id, tenantId))
+        .limit(1);
+
+      if (!tenant) {
+        void reply.status(404).send({
+          success: false,
+          error: { code: "NOT_FOUND", message: "Tenant not found" },
+        });
+        return;
+      }
+
+      if (tenant.status === "active") {
+        void reply.status(409).send({
+          success: false,
+          error: { code: "ALREADY_ACTIVE", message: "Tenant is already active" },
+        });
+        return;
+      }
+
+      await db
+        .update(tenants)
+        .set({ status: "active", deletedAt: null, updatedAt: new Date() })
+        .where(eq(tenants.id, tenantId));
+
+      await db.insert(auditLog).values({
+        actorId: admin.userId,
+        actorType: "platform_admin",
+        action: "tenant.reactivated",
+        resourceType: "tenant",
+        resourceId: tenantId,
+        metadata: { previousStatus: tenant.status },
+      });
+
+      dispatchWebhook("tenant.reactivated", tenantId, { tenantId });
+
+      return { success: true, data: { status: "active" } };
+    },
+  );
+
+  // ── Hard Delete Tenant (super_admin only) ──
+  app.delete(
+    "/tenants/:tenantId",
+    { preHandler: [requirePlatformAdmin, requireDeleteAccess] },
+    async (request, reply) => {
+      const paramResult = tenantIdParamSchema.safeParse(request.params);
+      if (!paramResult.success) {
+        void reply.status(400).send({
+          success: false,
+          error: { code: "VALIDATION_ERROR", message: "Invalid tenant ID" },
+        });
+        return;
+      }
+
+      const bodyResult = scheduleDeletionSchema.safeParse(request.body);
+      if (!bodyResult.success) {
+        void reply.status(400).send({
+          success: false,
+          error: { code: "VALIDATION_ERROR", message: "Reason and confirmSlug are required", details: bodyResult.error.issues },
+        });
+        return;
+      }
+
+      const { tenantId } = paramResult.data;
+      const { reason, confirmSlug } = bodyResult.data;
+      const admin = (request as FastifyRequest & { platformAdmin: PlatformAdminAuth }).platformAdmin;
+
+      const [tenant] = await db
+        .select()
+        .from(tenants)
+        .where(eq(tenants.id, tenantId))
+        .limit(1);
+
+      if (!tenant) {
+        void reply.status(404).send({
+          success: false,
+          error: { code: "NOT_FOUND", message: "Tenant not found" },
+        });
+        return;
+      }
+
+      if (confirmSlug !== tenant.slug) {
+        void reply.status(400).send({
+          success: false,
+          error: { code: "SLUG_MISMATCH", message: "Confirmation slug does not match tenant slug" },
+        });
+        return;
+      }
+
+      // Soft delete immediately (set deletedAt to now)
+      await db
+        .update(tenants)
+        .set({
+          status: "cancelled",
+          deletedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(tenants.id, tenantId));
+
+      await db.insert(auditLog).values({
+        actorId: admin.userId,
+        actorType: "platform_admin",
+        action: "tenant.deleted",
+        resourceType: "tenant",
+        resourceId: tenantId,
+        metadata: { reason, tenantName: tenant.name, tenantSlug: tenant.slug },
+      });
+
+      dispatchWebhook("tenant.cancelled", tenantId, {
+        tenantId,
+        reason,
+        deletedImmediately: true,
+      });
+
+      return { success: true };
+    },
+  );
 }

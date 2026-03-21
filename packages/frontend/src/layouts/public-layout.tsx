@@ -49,11 +49,16 @@ export function PublicLayout(): React.JSX.Element {
             </nav>
           </div>
 
-          <div className="hidden items-center gap-3 md:flex">
+          <div className="flex items-center gap-3">
             {session ? (
-              <Button variant="outline" size="sm" onClick={() => void navigate("/admin")}>
-                Dashboard
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => void navigate("/admin")}>
+                  Dashboard
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => void authClient.signOut().then(() => navigate("/"))}>
+                  Sign Out
+                </Button>
+              </div>
             ) : (
               <>
                 <Button variant="ghost" size="sm" onClick={() => void navigate("/auth/login")}>
@@ -79,9 +84,14 @@ export function PublicLayout(): React.JSX.Element {
                 <NavItems onClick={() => setMobileOpen(false)} />
                 <Separator />
                 {session ? (
-                  <Button variant="outline" size="sm" onClick={() => { setMobileOpen(false); void navigate("/admin"); }}>
-                    Dashboard
-                  </Button>
+                  <>
+                    <Button variant="outline" size="sm" onClick={() => { setMobileOpen(false); void navigate("/admin"); }}>
+                      Dashboard
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => { setMobileOpen(false); void authClient.signOut().then(() => navigate("/")); }}>
+                      Sign Out
+                    </Button>
+                  </>
                 ) : (
                   <>
                     <Button variant="ghost" size="sm" onClick={() => { setMobileOpen(false); void navigate("/auth/login"); }}>

@@ -313,6 +313,36 @@ export async function moduleRoutes(app: FastifyInstance): Promise<void> {
             newStatus: updates.status,
           });
         }
+
+        // Send module status change email
+        const [statusTenant] = await db
+          .select({ name: tenants.name, billingEmail: tenants.billingEmail })
+          .from(tenants)
+          .where(eq(tenants.id, tenantId))
+          .limit(1);
+
+        if (statusTenant?.billingEmail) {
+          const productName = existing.productId === "safespec" ? "SafeSpec" : "Nexum";
+          if (updates.status === "suspended" || updates.status === "cancelled") {
+            void sendModuleRemovedEmail({
+              to: statusTenant.billingEmail,
+              companyName: statusTenant.name,
+              moduleName: moduleId,
+              productName,
+              retentionDays: 90,
+            }).catch(() => { /* non-blocking */ });
+          } else if (updates.status === "active") {
+            void sendModuleAddedEmail({
+              to: statusTenant.billingEmail,
+              companyName: statusTenant.name,
+              moduleName: moduleId,
+              productName,
+              loginUrl: existing.productId === "safespec"
+                ? "https://app.safespec.com.au"
+                : "https://app.nexum.com.au",
+            }).catch(() => { /* non-blocking */ });
+          }
+        }
       }
 
       return reply.send({
