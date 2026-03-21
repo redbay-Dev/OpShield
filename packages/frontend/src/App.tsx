@@ -10,6 +10,7 @@ import { TwoFactorVerifyPage } from "@frontend/pages/auth/two-factor-verify.js";
 import { DashboardPage } from "@frontend/pages/admin/dashboard.js";
 import { TenantListPage } from "@frontend/pages/admin/tenants/tenant-list.js";
 import { TenantDetailPage } from "@frontend/pages/admin/tenants/tenant-detail.js";
+import { WebhookLogPage } from "@frontend/pages/admin/webhook-log.js";
 
 export function App(): React.JSX.Element {
   return (
@@ -40,6 +41,10 @@ export function App(): React.JSX.Element {
             <Route
               path="admin/tenants/:tenantId"
               element={<TenantDetailPage />}
+            />
+            <Route
+              path="admin/webhook-log"
+              element={<WebhookLogPage />}
             />
           </Route>
         </Route>

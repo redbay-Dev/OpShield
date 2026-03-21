@@ -2,6 +2,36 @@
 
 All notable changes to OpShield are documented here.
 
+## [Unreleased] — Phase 9: Polish & Admin Tooling
+
+### Added
+- **Auto-provisioning on module add**: When the first module for a product is added to a tenant, provisioning is automatically triggered — no manual "Provision" button click needed. Existing provisioned products are not re-triggered.
+- **Webhook delivery log API**: `GET /api/v1/webhook-deliveries` (platform admin only) — paginated list of all outbound webhook deliveries with optional filters: `tenantId`, `productId`, `eventType`, `status` (success/failed)
+- **Webhook delivery log admin page**: New "Webhook Log" page in the admin sidebar showing delivery history with status icons, HTTP status badges, error details, product/event filters, and pagination
+- **Provisioning status auto-polling**: Provisioning tab now auto-refreshes every 5 seconds while any product has "dispatched" status, stopping automatically when all products reach success/failed
+- **shadcn Select component**: Added for filter dropdowns in webhook log page
+- **Webhook delivery schemas**: `webhookDeliveryQuerySchema`, `webhookDeliveryResponseSchema` in shared package
+
+### Tests
+- Webhook delivery route auth guard tests (4 tests)
+- All 111 tests passing across 14 test files
+
+### Still Missing
+- **Support Hub** — No schema, routes, services, or UI (spec: `docs/06-SUPPORT-SYSTEM.md`)
+- **Email/Notifications** — No SMTP service, templates, or queue (spec: `docs/08-NOTIFICATIONS-EMAIL.md`)
+- **Public Website** — No landing, pricing, or sign-up pages
+- **Tenant Self-Service** — No account settings, billing portal, or invite flow for end users
+- **SSO Provider Config** — `tenant_sso_providers` table exists but no routes or UI to configure per-tenant Azure AD
+- **Advanced Platform Admin** — Missing: impersonation, audit log analytics, system health dashboard
+- **Email notification on provisioning failure** — Not yet implemented
+
+### Next Steps (Priority Order)
+1. **Support Hub** (docs/06) — DB schema (tickets, messages), API routes, email processing, admin UI
+2. **Email/Notifications** (docs/08) — SMTP service, template engine, billing alerts
+3. **Public Website** — Landing page, pricing page, sign-up flow with redirect
+4. **SSO Provider Config UI** — Routes + admin UI for per-tenant Azure AD configuration
+5. **SafeSpec webhook handler** — Implement `tenant.created` handler in SafeSpec backend
+
 ## [Unreleased] — Phase 8: Tenant Provisioning
 
 ### Added
@@ -19,17 +49,11 @@ All notable changes to OpShield are documented here.
 - DEC-034: Products self-provision via webhook — OpShield never connects to product databases
 - DEC-035: 200 from webhook = "received", not "provisioned" — products call back to confirm
 
-### Still Missing
+### Still Missing (at time of release)
 - SafeSpec does not yet handle the `tenant.created` webhook event (Nexum already does)
-- Automatic provisioning trigger on tenant creation (currently manual via admin UI)
-- Provisioning status polling/refresh in the UI (currently requires tab reload)
+- ~~Automatic provisioning trigger on tenant creation~~ → **Resolved in Phase 9** (auto-triggers on module add)
+- ~~Provisioning status polling/refresh in the UI~~ → **Resolved in Phase 9** (5s auto-polling while dispatched)
 - Email notification to admin on provisioning failure
-
-### Next Steps
-- Implement `tenant.created` webhook handler in SafeSpec (see `docs/03-INTEGRATION-ARCHITECTURE.md`)
-- Wire up automatic provisioning dispatch after tenant creation + module assignment
-- Run migration `0004_tenant_provisioning.sql` against the database
-- Consider auto-polling provisioning status in the UI while status is "dispatched"
 
 ## [Unreleased] — Phase 7: Outbound Webhooks + Usage Reporting
 

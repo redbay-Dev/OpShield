@@ -3,6 +3,7 @@ import { Outlet, NavLink, useNavigate } from "react-router";
 import {
   LayoutDashboard,
   Building2,
+  Webhook,
   Menu,
   LogOut,
   Shield,
@@ -34,6 +35,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
   { label: "Tenants", href: "/admin/tenants", icon: Building2 },
+  { label: "Webhook Log", href: "/admin/webhook-log", icon: Webhook },
 ];
 
 function SidebarContent(): React.JSX.Element {

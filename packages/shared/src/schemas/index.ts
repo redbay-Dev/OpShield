@@ -247,3 +247,29 @@ export const invoiceResponseSchema = z.object({
 });
 
 export type InvoiceResponse = z.infer<typeof invoiceResponseSchema>;
+
+/** Query params for listing webhook deliveries */
+export const webhookDeliveryQuerySchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  tenantId: z.string().uuid().optional(),
+  productId: z.enum(["safespec", "nexum"]).optional(),
+  eventType: z.string().optional(),
+  status: z.enum(["success", "failed"]).optional(),
+});
+
+export type WebhookDeliveryQuery = z.infer<typeof webhookDeliveryQuerySchema>;
+
+/** Webhook delivery response schema */
+export const webhookDeliveryResponseSchema = z.object({
+  id: z.string().uuid(),
+  productId: z.string(),
+  eventType: z.string(),
+  tenantId: z.string().uuid(),
+  httpStatus: z.number().int().nullable(),
+  error: z.string().nullable(),
+  payload: z.record(z.string(), z.unknown()),
+  createdAt: z.string(),
+});
+
+export type WebhookDeliveryResponse = z.infer<typeof webhookDeliveryResponseSchema>;

@@ -48,7 +48,9 @@ interface ProvisioningTabProps {
 }
 
 export function ProvisioningTab({ tenantId }: ProvisioningTabProps): React.JSX.Element {
-  const { data: statuses, isPending } = useProvisioningStatus(tenantId);
+  const { data: statuses, isPending } = useProvisioningStatus(tenantId, {
+    pollWhileDispatched: true,
+  });
   const provisionMutation = useProvisionTenant(tenantId);
   const retryMutation = useRetryProvisioning(tenantId);
 

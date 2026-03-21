@@ -12,6 +12,8 @@ import {
 } from "@opshield/shared/schemas";
 import { SAFESPEC_MODULES, NEXUM_MODULES } from "@opshield/shared/constants";
 import { dispatchWebhook } from "../services/webhook.js";
+import { provisionTenant } from "../services/provisioning.js";
+import { tenantProvisioning } from "../db/schema/tenants.js";
 
 /** All valid module IDs by product */
 const VALID_MODULES: Record<string, ReadonlySet<string>> = {
@@ -167,6 +169,27 @@ export async function moduleRoutes(app: FastifyInstance): Promise<void> {
         maxUsers,
         status,
       });
+
+      // Auto-provision: if this product has no provisioning record yet, trigger it
+      const [existingProv] = await db
+        .select({ id: tenantProvisioning.id })
+        .from(tenantProvisioning)
+        .where(
+          and(
+            eq(tenantProvisioning.tenantId, tenantId),
+            eq(tenantProvisioning.productId, productId),
+          ),
+        )
+        .limit(1);
+
+      if (!existingProv) {
+        void provisionTenant(tenantId).catch((err: unknown) => {
+          app.log.error(
+            { tenantId, productId, error: err instanceof Error ? err.message : String(err) },
+            "Auto-provisioning failed after module add",
+          );
+        });
+      }
 
       return reply.status(201).send({
         success: true,

@@ -114,11 +114,23 @@ export function useRemoveModule(tenantId: string) {
 
 // ── Provisioning ──
 
-export function useProvisioningStatus(tenantId: string) {
+export function useProvisioningStatus(
+  tenantId: string,
+  options?: { pollWhileDispatched?: boolean },
+) {
   return useQuery({
     queryKey: ["tenants", tenantId, "provisioning"],
     queryFn: () => fetchProvisioningStatus(tenantId),
     enabled: Boolean(tenantId),
+    refetchInterval: options?.pollWhileDispatched
+      ? (query) => {
+          const data = query.state.data as
+            | Awaited<ReturnType<typeof fetchProvisioningStatus>>
+            | undefined;
+          const hasDispatched = data?.some((s) => s.status === "dispatched") ?? false;
+          return hasDispatched ? 5000 : false;
+        }
+      : undefined,
   });
 }
 

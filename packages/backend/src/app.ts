@@ -19,6 +19,7 @@ import { subscriptionRoutes } from "./routes/subscriptions.js";
 import { invoiceRoutes } from "./routes/invoices.js";
 import { usageRoutes } from "./routes/usage.js";
 import { provisioningRoutes } from "./routes/provisioning.js";
+import { webhookDeliveryRoutes } from "./routes/webhook-deliveries.js";
 
 const TRUSTED_ORIGINS = new Set([
   config.auth.url,
@@ -217,6 +218,7 @@ export function buildApp(): ReturnType<typeof Fastify> {
       void api.register(invoiceRoutes);
       void api.register(usageRoutes);
       void api.register(provisioningRoutes);
+      void api.register(webhookDeliveryRoutes);
     },
     { prefix: "/api/v1" },
   );
