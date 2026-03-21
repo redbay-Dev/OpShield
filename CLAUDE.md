@@ -91,6 +91,16 @@ Products are modular — signing up does NOT grant access to everything:
 
 ## Critical Rules
 
+### FINISH WHAT YOU START (MOST IMPORTANT RULE)
+- **Do NOT implement thin CRUD slices and call them done.** When building a feature, implement ALL requirements with full business logic, workflows, and integrations before moving to the next feature.
+- **Check every bullet point** in the spec doc for the feature you're building. If the spec says a feature has 6 requirements and you've built 2, it's not done.
+- **"Implemented" means:** all workflows, validation rules, UI polish, background jobs, notification triggers, integrations — not just CRUD endpoints. If the spec says "automatic" build the automation, not just a manual status field.
+- **Depth over breadth.** One fully working, production-ready feature is worth more than five scaffolded ones.
+- **Changelog honesty.** When writing changelog entries, list what's STILL MISSING from the spec, not just what was built. Never declare a feature "complete" unless every requirement in the spec is implemented.
+- **No temporary placeholders.** No TODO comments, no dummy data, no "will be added later", no dev-mode shortcuts.
+- **If you run out of context/time,** clearly document exactly what remains unfinished so the next session can pick it up.
+- **Verification step:** After building, re-read the spec and diff it against what you built. If bullets are missing, you're not done. Tests passing means nothing if the tests only cover what was built, not what was specified.
+
 ### TYPESCRIPT TYPE SAFETY (NEVER VIOLATE)
 Same rules as Nexum/SafeSpec — see their CLAUDE.md for full details.
 - `strict: true` — non-negotiable
