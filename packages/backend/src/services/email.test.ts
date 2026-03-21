@@ -23,6 +23,8 @@ describe("email templates", () => {
       "provisioning-failed.hbs",
       "trial-ending.hbs",
       "trial-expired.hbs",
+      "ticket-acknowledgment.hbs",
+      "ticket-reply.hbs",
     ];
 
     for (const name of required) {
@@ -203,6 +205,43 @@ describe("email templates", () => {
     expect(html).toContain("AUD");
     expect(html).toContain("suspended");
     expect(html).toContain("http://localhost:5170/billing");
+  });
+
+  it("ticket-acknowledgment template renders ticket info", () => {
+    const source = readFileSync(resolve(TEMPLATE_DIR, "ticket-acknowledgment.hbs"), "utf-8");
+    const template = Handlebars.compile(source);
+    const html = template({
+      userName: "Jane",
+      ticketNumber: "T-089",
+      subject: "Can't generate PDF",
+      category: "bug_report",
+      priority: "high",
+    });
+
+    expect(html).toContain("Jane");
+    expect(html).toContain("T-089");
+    expect(html).toContain("Can&#x27;t generate PDF");
+    expect(html).toContain("bug_report");
+    expect(html).toContain("high");
+  });
+
+  it("ticket-reply template renders reply content", () => {
+    const source = readFileSync(resolve(TEMPLATE_DIR, "ticket-reply.hbs"), "utf-8");
+    const template = Handlebars.compile(source);
+    const html = template({
+      userName: "Jane",
+      agentName: "Ryan",
+      ticketNumber: "T-089",
+      subject: "Can't generate PDF",
+      replyBody: "I've fixed the issue. Please try again.",
+      productName: "SafeSpec",
+    });
+
+    expect(html).toContain("Jane");
+    expect(html).toContain("Ryan");
+    expect(html).toContain("T-089");
+    expect(html).toContain("I&#x27;ve fixed the issue");
+    expect(html).toContain("SafeSpec");
   });
 
   it("no template uses triple-brace unescaped output", () => {

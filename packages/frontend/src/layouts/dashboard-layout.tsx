@@ -7,6 +7,7 @@ import {
   ScrollText,
   HeartPulse,
   TrendingUp,
+  LifeBuoy,
   Menu,
   LogOut,
   User,
@@ -43,6 +44,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Tenants", href: "/admin/tenants", icon: Building2 },
   { label: "Webhook Log", href: "/admin/webhook-log", icon: Webhook },
   { label: "Revenue", href: "/admin/revenue", icon: TrendingUp },
+  { label: "Support", href: "/admin/support", icon: LifeBuoy },
   { label: "Audit Log", href: "/admin/audit-log", icon: ScrollText },
   { label: "System Health", href: "/admin/system-health", icon: HeartPulse },
 ];

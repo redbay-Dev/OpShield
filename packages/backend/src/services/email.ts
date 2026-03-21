@@ -401,6 +401,52 @@ export async function sendPaymentFailedFinalEmail(params: {
   });
 }
 
+export async function sendTicketAcknowledgmentEmail(params: {
+  to: string;
+  userName: string;
+  ticketNumber: string;
+  subject: string;
+  category: string;
+  priority: string;
+}): Promise<void> {
+  await sendEmail({
+    to: params.to,
+    subject: `[${params.ticketNumber}] ${params.subject}`,
+    template: "ticket-acknowledgment",
+    data: {
+      userName: params.userName,
+      ticketNumber: params.ticketNumber,
+      subject: params.subject,
+      category: params.category,
+      priority: params.priority,
+    },
+  });
+}
+
+export async function sendTicketReplyEmail(params: {
+  to: string;
+  userName: string;
+  agentName: string;
+  ticketNumber: string;
+  subject: string;
+  replyBody: string;
+  productName: string;
+}): Promise<void> {
+  await sendEmail({
+    to: params.to,
+    subject: `Re: [${params.ticketNumber}] ${params.subject}`,
+    template: "ticket-reply",
+    data: {
+      userName: params.userName,
+      agentName: params.agentName,
+      ticketNumber: params.ticketNumber,
+      subject: params.subject,
+      replyBody: params.replyBody,
+      productName: params.productName,
+    },
+  });
+}
+
 /**
  * Verify SMTP connection is working. Called at startup.
  */

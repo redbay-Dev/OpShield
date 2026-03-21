@@ -2,6 +2,7 @@ import type { FastifyReply } from "fastify";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
+import multipart from "@fastify/multipart";
 import {
   serializerCompiler,
   validatorCompiler,
@@ -29,6 +30,9 @@ import { exportRoutes } from "./routes/export.js";
 import { tenantActionRoutes } from "./routes/tenant-actions.js";
 import { impersonationRoutes } from "./routes/impersonation.js";
 import { authRedirectRoutes } from "./routes/auth-redirect.js";
+import { supportTicketRoutes } from "./routes/support-tickets.js";
+import { adminSupportRoutes } from "./routes/admin-support.js";
+import { inboundEmailRoutes } from "./routes/inbound-email.js";
 
 const TRUSTED_ORIGINS = new Set([
   config.auth.url,
@@ -190,6 +194,12 @@ export function buildApp(): ReturnType<typeof Fastify> {
     credentials: true,
   });
 
+  void app.register(multipart, {
+    limits: {
+      fileSize: 10 * 1024 * 1024, // 10MB
+    },
+  });
+
   // ── Better Auth catch-all ──
   app.all("/api/auth/*", async (request, reply) => {
     const response = await handleAuthRequest(request.url, request.method, request.headers as Record<string, string>, request.body);
@@ -209,6 +219,9 @@ export function buildApp(): ReturnType<typeof Fastify> {
 
   // Stripe webhook — own encapsulated scope for raw body parsing (before /api/v1)
   void app.register(stripeWebhookRoute);
+
+  // Inbound email webhook (before /api/v1 prefix)
+  void app.register(inboundEmailRoutes);
 
   // Health check (unauthenticated)
   void app.register(healthRoutes);
@@ -239,6 +252,8 @@ export function buildApp(): ReturnType<typeof Fastify> {
       void api.register(exportRoutes);
       void api.register(tenantActionRoutes);
       void api.register(impersonationRoutes);
+      void api.register(supportTicketRoutes);
+      void api.register(adminSupportRoutes);
     },
     { prefix: "/api/v1" },
   );

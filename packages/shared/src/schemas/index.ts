@@ -403,3 +403,219 @@ export const ssoProviderResponseSchema = z.object({
 });
 
 export type SsoProviderResponse = z.infer<typeof ssoProviderResponseSchema>;
+
+// ── Support Hub Schemas ─────────────────────────────────────────────
+
+/** Ticket category enum values */
+const ticketCategoryValues = [
+  "bug_report",
+  "feature_request",
+  "billing",
+  "how_to",
+  "account",
+  "other",
+] as const;
+
+/** Ticket priority enum values */
+const ticketPriorityValues = [
+  "low",
+  "medium",
+  "high",
+  "urgent",
+] as const;
+
+/** Ticket status enum values */
+const ticketStatusValues = [
+  "open",
+  "in_progress",
+  "waiting_on_customer",
+  "waiting_on_internal",
+  "resolved",
+  "closed",
+] as const;
+
+/** Sender type enum values */
+const senderTypeValues = [
+  "customer",
+  "admin",
+  "system",
+] as const;
+
+/** Create a support ticket (called from product backends via service key) */
+export const createTicketSchema = z.object({
+  productId: z.enum(["safespec", "nexum", "opshield"]),
+  tenantId: z.string().uuid(),
+  userId: z.string().min(1),
+  userEmail: z.email(),
+  userName: z.string().min(1).max(255),
+  category: z.enum(ticketCategoryValues).default("other"),
+  subject: z.string().min(1).max(500),
+  description: z.string().min(1).max(10000),
+  pageUrl: z.string().max(2000).optional(),
+  browserInfo: z.record(z.string(), z.unknown()).optional(),
+});
+
+export type CreateTicketInput = z.infer<typeof createTicketSchema>;
+
+/** Add a message to an existing ticket */
+export const createTicketMessageSchema = z.object({
+  body: z.string().min(1).max(10000),
+  isInternalNote: z.boolean().default(false),
+});
+
+export type CreateTicketMessageInput = z.infer<typeof createTicketMessageSchema>;
+
+/** Admin update to a ticket (status, priority, assignment, tags) */
+export const updateTicketSchema = z.object({
+  status: z.enum(ticketStatusValues).optional(),
+  priority: z.enum(ticketPriorityValues).optional(),
+  assignedTo: z.string().uuid().nullable().optional(),
+  tags: z.array(z.string().max(50)).max(20).optional(),
+});
+
+export type UpdateTicketInput = z.infer<typeof updateTicketSchema>;
+
+/** Query params for listing tickets (admin) */
+export const ticketListQuerySchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  status: z.enum(ticketStatusValues).optional(),
+  priority: z.enum(ticketPriorityValues).optional(),
+  productId: z.enum(["safespec", "nexum", "opshield"]).optional(),
+  tenantId: z.string().uuid().optional(),
+  assignedTo: z.string().uuid().optional(),
+  category: z.enum(ticketCategoryValues).optional(),
+});
+
+export type TicketListQuery = z.infer<typeof ticketListQuerySchema>;
+
+/** Query params for listing tickets (tenant-facing, via service key) */
+export const tenantTicketListQuerySchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  tenantId: z.string().uuid(),
+  userId: z.string().optional(),
+});
+
+export type TenantTicketListQuery = z.infer<typeof tenantTicketListQuerySchema>;
+
+/** Ticket number path param */
+export const ticketNumberParamSchema = z.object({
+  ticketNumber: z.string().regex(/^T-\d+$/, "Invalid ticket number format"),
+});
+
+export type TicketNumberParam = z.infer<typeof ticketNumberParamSchema>;
+
+/** Support message response */
+export const supportMessageResponseSchema = z.object({
+  id: z.string().uuid(),
+  ticketId: z.string().uuid(),
+  senderType: z.enum(senderTypeValues),
+  senderId: z.string(),
+  senderName: z.string(),
+  senderEmail: z.string(),
+  body: z.string(),
+  isInternalNote: z.boolean(),
+  createdAt: z.string(),
+});
+
+export type SupportMessageResponse = z.infer<typeof supportMessageResponseSchema>;
+
+/** Support ticket response (list view) */
+export const supportTicketResponseSchema = z.object({
+  id: z.string().uuid(),
+  ticketNumber: z.string(),
+  productId: z.string(),
+  tenantId: z.string().uuid(),
+  userId: z.string(),
+  userEmail: z.string(),
+  userName: z.string(),
+  category: z.enum(ticketCategoryValues),
+  subject: z.string(),
+  priority: z.enum(ticketPriorityValues),
+  status: z.enum(ticketStatusValues),
+  assignedTo: z.string().uuid().nullable(),
+  tags: z.array(z.string()),
+  firstResponseAt: z.string().nullable(),
+  resolvedAt: z.string().nullable(),
+  closedAt: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export type SupportTicketResponse = z.infer<typeof supportTicketResponseSchema>;
+
+/** Support ticket detail response (includes messages and tenant context) */
+export const supportTicketDetailResponseSchema = supportTicketResponseSchema.extend({
+  description: z.string(),
+  pageUrl: z.string().nullable(),
+  browserInfo: z.record(z.string(), z.unknown()).nullable(),
+  messages: z.array(supportMessageResponseSchema),
+  tenantName: z.string().optional(),
+  tenantStatus: z.string().optional(),
+});
+
+export type SupportTicketDetailResponse = z.infer<typeof supportTicketDetailResponseSchema>;
+
+/** Support stats response (admin dashboard) */
+export const supportStatsResponseSchema = z.object({
+  openCount: z.number().int(),
+  inProgressCount: z.number().int(),
+  waitingCount: z.number().int(),
+  resolvedTodayCount: z.number().int(),
+  avgFirstResponseMinutes: z.number().nullable(),
+  avgResolutionMinutes: z.number().nullable(),
+});
+
+export type SupportStatsResponse = z.infer<typeof supportStatsResponseSchema>;
+
+/** Create a canned response */
+export const createCannedResponseSchema = z.object({
+  title: z.string().min(1).max(255),
+  body: z.string().min(1).max(10000),
+  category: z.enum(ticketCategoryValues).optional(),
+  productId: z.enum(["safespec", "nexum", "opshield"]).optional(),
+});
+
+export type CreateCannedResponseInput = z.infer<typeof createCannedResponseSchema>;
+
+/** Canned response item */
+export const cannedResponseSchema = z.object({
+  id: z.string().uuid(),
+  title: z.string(),
+  body: z.string(),
+  category: z.string().nullable(),
+  productId: z.string().nullable(),
+  usageCount: z.number().int(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export type CannedResponseItem = z.infer<typeof cannedResponseSchema>;
+
+/** Support attachment response */
+export const supportAttachmentResponseSchema = z.object({
+  id: z.string().uuid(),
+  ticketId: z.string().uuid(),
+  messageId: z.string().uuid().nullable(),
+  fileName: z.string(),
+  fileSize: z.number().int(),
+  mimeType: z.string(),
+  createdAt: z.string(),
+});
+
+export type SupportAttachmentResponse = z.infer<typeof supportAttachmentResponseSchema>;
+
+/** Inbound email webhook payload */
+export const inboundEmailPayloadSchema = z.object({
+  from: z.string().min(1),
+  fromName: z.string().optional(),
+  to: z.string().min(1),
+  subject: z.string().min(1),
+  textBody: z.string().default(""),
+  htmlBody: z.string().optional(),
+  messageId: z.string().optional(),
+  headers: z.record(z.string(), z.string()).optional(),
+});
+
+export type InboundEmailPayload = z.infer<typeof inboundEmailPayloadSchema>;

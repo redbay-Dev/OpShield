@@ -23,7 +23,7 @@ async function findOrCreateProduct(
   });
 
   if (existing.data.length > 0 && existing.data[0]) {
-    console.log(`  Found existing Stripe product: ${existing.data[0].id}`);
+    console.warn(`  Found existing Stripe product: ${existing.data[0].id}`);
     return existing.data[0].id;
   }
 
@@ -31,7 +31,7 @@ async function findOrCreateProduct(
     name,
     metadata: { moduleId, productId },
   });
-  console.log(`  Created Stripe product: ${product.id}`);
+  console.warn(`  Created Stripe product: ${product.id}`);
   return product.id;
 }
 
@@ -57,7 +57,7 @@ async function findOrCreatePrice(
   );
 
   if (match) {
-    console.log(`  Found existing price: ${match.id} (${nickname})`);
+    console.warn(`  Found existing price: ${match.id} (${nickname})`);
     return match.id;
   }
 
@@ -68,7 +68,7 @@ async function findOrCreatePrice(
     recurring: { interval },
     nickname,
   });
-  console.log(`  Created price: ${price.id} (${nickname})`);
+  console.warn(`  Created price: ${price.id} (${nickname})`);
   return price.id;
 }
 
@@ -78,7 +78,7 @@ async function findOrCreateCoupon(
 ): Promise<void> {
   try {
     await stripe.coupons.retrieve(couponId);
-    console.log(`  Coupon "${couponId}" already exists`);
+    console.warn(`  Coupon "${couponId}" already exists`);
   } catch {
     await stripe.coupons.create({
       id: couponId,
@@ -86,12 +86,12 @@ async function findOrCreateCoupon(
       duration: "forever",
       name: `Bundle ${percentOff}% discount`,
     });
-    console.log(`  Created coupon: ${couponId} (${percentOff}% off)`);
+    console.warn(`  Created coupon: ${couponId} (${percentOff}% off)`);
   }
 }
 
 async function main(): Promise<void> {
-  console.log("=== Stripe Price Sync ===\n");
+  console.warn("=== Stripe Price Sync ===\n");
 
   // 1. Read all active plans
   const allPlans = await db
@@ -99,7 +99,7 @@ async function main(): Promise<void> {
     .from(plans)
     .where(eq(plans.isActive, "true"));
 
-  console.log(`Found ${allPlans.length} active plans\n`);
+  console.warn(`Found ${allPlans.length} active plans\n`);
 
   // 2. Group plans by module
   const byModule = new Map<string, typeof allPlans>();
@@ -112,7 +112,7 @@ async function main(): Promise<void> {
 
   // 3. Process each module group
   for (const [key, modulePlans] of byModule) {
-    console.log(`\nProcessing module: ${key}`);
+    console.warn(`\nProcessing module: ${key}`);
     const first = modulePlans[0];
     if (!first) continue;
 
@@ -156,16 +156,16 @@ async function main(): Promise<void> {
         })
         .where(eq(plans.id, plan.id));
 
-      console.log(`  Updated plan ${plan.id}: base=${basePriceId}, perUser=${perUserPriceId ?? "N/A"}`);
+      console.warn(`  Updated plan ${plan.id}: base=${basePriceId}, perUser=${perUserPriceId ?? "N/A"}`);
     }
   }
 
   // 4. Create bundle coupons
-  console.log("\n=== Bundle Coupons ===");
+  console.warn("\n=== Bundle Coupons ===");
   await findOrCreateCoupon(STRIPE_COUPONS.BUNDLE_10_PERCENT, 10);
   await findOrCreateCoupon(STRIPE_COUPONS.BUNDLE_15_PERCENT, 15);
 
-  console.log("\n=== Sync Complete ===");
+  console.warn("\n=== Sync Complete ===");
   process.exit(0);
 }
 

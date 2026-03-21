@@ -2,6 +2,88 @@
 
 All notable changes to OpShield are documented here.
 
+## [Unreleased] — Phase 14: Support Hub
+
+### Added
+
+#### Support Hub Database Schema
+- **`support_tickets` table**: Full ticket lifecycle — ticket number (auto-incrementing T-XXX), product, tenant, user, category (6 types), priority (4 levels), status (6 states), assignment, tags, SLA timestamps (first response, resolved, closed), soft delete
+- **`support_messages` table**: Immutable conversation thread — sender type (customer/admin/system), body, internal note flag, email message ID for dedup
+- **`support_attachments` table**: File metadata with MinIO/S3 storage key reference
+- **`canned_responses` table**: Reusable reply templates with category, product scope, and usage tracking
+- **DB migration**: `0008_support_hub.sql` with indexes on tenant, status, priority, product, assigned_to, created_at
+- **Ticket number sequence**: PostgreSQL sequence for human-readable auto-incrementing IDs
+
+#### Support Constants & Schemas
+- **Constants**: `TICKET_CATEGORIES` (6), `TICKET_PRIORITIES` (4), `TICKET_STATUSES` (6), `SENDER_TYPES` (3), `SLA_TARGETS` (response/resolution hours per priority)
+- **Zod schemas**: `createTicketSchema`, `createTicketMessageSchema`, `updateTicketSchema`, `ticketListQuerySchema`, `tenantTicketListQuerySchema`, `ticketNumberParamSchema`, `supportTicketResponseSchema`, `supportTicketDetailResponseSchema`, `supportMessageResponseSchema`, `supportStatsResponseSchema`, `createCannedResponseSchema`, `cannedResponseSchema`
+
+#### Tenant-Facing Support API (Service Key Auth)
+- **`POST /api/v1/support/tickets`**: Create ticket from product backend — auto-generates ticket number, determines priority (enterprise→high, billing+past_due→urgent, bug→medium, feature/how_to→low), creates initial message, sends acknowledgment email
+- **`GET /api/v1/support/tickets`**: List tickets for a tenant/user with pagination
+- **`GET /api/v1/support/tickets/:ticketNumber`**: Ticket detail with messages (internal notes filtered out for tenant-facing requests)
+- **`POST /api/v1/support/tickets/:ticketNumber/messages`**: Customer reply — auto-reopens resolved/waiting tickets
+
+#### Admin Support API (Platform Admin Auth)
+- **`GET /api/v1/admin/support/tickets`**: List all tickets with filters (status, priority, product, tenant, assigned, category) + tenant name join
+- **`GET /api/v1/admin/support/tickets/:ticketNumber`**: Full detail with messages (including internal notes), tenant context (name, status)
+- **`POST /api/v1/admin/support/tickets/:ticketNumber/messages`**: Admin reply or internal note — tracks first response time, updates ticket status to in_progress, sends reply email to customer (non-internal only), audit logged
+- **`PATCH /api/v1/admin/support/tickets/:ticketNumber`**: Update status, priority, assignment, tags — auto-sets resolvedAt/closedAt timestamps, audit logged
+- **`GET /api/v1/admin/support/stats`**: Dashboard stats — open count, in-progress count, waiting count, resolved today, avg first response time (minutes), avg resolution time (minutes)
+- **`GET /api/v1/admin/support/canned-responses`**: List canned responses (sorted by usage)
+- **`POST /api/v1/admin/support/canned-responses`**: Create canned response (write access required)
+
+#### Auto-Priority Logic
+- **`determinePriority()` service**: Checks tenant subscription tier and status — enterprise plan→high, billing category + past_due subscription→urgent, bug_report→medium, feature_request/how_to→low, default→medium
+
+#### Support Email Templates (2 new)
+- **`ticket-acknowledgment.hbs`**: Receipt confirmation with ticket number, subject, category, priority
+- **`ticket-reply.hbs`**: Admin reply to customer with agent name, reply body, product name, ticket reference
+- **Send functions**: `sendTicketAcknowledgmentEmail()`, `sendTicketReplyEmail()` added to email service
+
+#### File Attachments (MinIO/S3)
+- **S3 storage service** (`services/storage.ts`): MinIO-compatible S3 client with `uploadFile()`, `getDownloadUrl()` (presigned 15-min URLs), `deleteFile()`
+- **`@aws-sdk/client-s3`** + **`@aws-sdk/s3-request-presigner`** + **`@fastify/multipart`** dependencies added
+- **`POST /api/v1/support/tickets/:ticketNumber/attachments`**: Upload file (max 10MB, allowlisted MIME types: images, PDF, text, CSV, Excel, Word) — stores in MinIO, records metadata in DB
+- **`GET /api/v1/support/tickets/:ticketNumber/attachments`**: List all attachments for a ticket
+- **`GET /api/v1/support/tickets/:ticketNumber/attachments/:attachmentId/download`**: Get presigned download URL for an attachment
+- **MIME type allowlist**: `image/png`, `image/jpeg`, `image/gif`, `image/webp`, `application/pdf`, `text/plain`, `text/csv`, `application/json`, `.xlsx`, `.docx`
+
+#### Inbound Email Webhook
+- **`POST /api/webhooks/inbound-email`**: Receives parsed inbound emails from email provider (SMTP2GO, Mailgun, Postmark) — creates new tickets or appends replies to existing threads
+- **Ticket number detection**: Parses `[T-XXX]` from subject line to identify replies vs new tickets
+- **Email deduplication**: Uses `emailMessageId` to prevent duplicate messages from provider retries
+- **Auto-reopen**: Tickets in `resolved` or `waiting_on_customer` status are automatically reopened when customer replies
+- **Header-based enrichment**: Extracts `X-Redbay-Product`, `X-Redbay-Tenant-Id`, `X-Redbay-User-Id`, `X-Redbay-Category`, `X-Redbay-Page` from custom headers set by product backends
+- **Tenant resolution fallback**: When no tenant header is provided, looks up existing tickets by sender email to determine tenant
+- **Email parsing**: Extracts sender name and email from `Name <email>` format strings
+
+#### Support Hub Frontend
+- **API client** (`api/support.ts`): `fetchAdminTickets`, `fetchAdminTicketDetail`, `updateTicket`, `addAdminMessage`, `fetchSupportStats`, `fetchCannedResponses`, `createCannedResponse`
+- **React Query hooks** (`hooks/use-support.ts`): `useAdminTickets`, `useAdminTicketDetail`, `useUpdateTicket`, `useAddAdminMessage`, `useSupportStats`, `useCannedResponses`, `useCreateCannedResponse`
+- **Ticket list page** (`/admin/support`): Stats cards (open, in-progress, waiting, resolved today), filterable table (status, priority, product), clickable rows, pagination
+- **Ticket detail page** (`/admin/support/:ticketNumber`): Conversation thread with color-coded messages (customer/admin/internal note), reply box with internal note toggle, context sidebar (product, tenant with link, user info, page URL, timestamps), status/priority controls
+- **Sidebar navigation**: "Support" link with LifeBuoy icon added to admin dashboard sidebar
+
+### Tests
+- **3 new route test files**: `support-tickets.test.ts` (7 auth guard tests including attachments), `admin-support.test.ts` (7 auth guard tests), `inbound-email.test.ts` (5 webhook tests)
+- **2 new email template tests**: ticket-acknowledgment and ticket-reply rendering
+- **25 new schema validation tests**: createTicketSchema (5), updateTicketSchema (4), ticketListQuerySchema (2), ticketNumberParamSchema (3), createTicketMessageSchema (3), createCannedResponseSchema (3), inboundEmailPayloadSchema (5)
+- **All 249 tests passing across 34 test files (4 packages)**
+
+### Decisions
+- DEC-048: Support tickets created via both API (product backends) and inbound email webhook — dual ingestion from day one
+- DEC-049: Ticket numbers use PostgreSQL sequence (T-001, T-002...) for human-readable IDs — simple, gap-free, no collision risk
+- DEC-050: Auto-priority based on plan tier + category — enterprise→high, billing+past_due→urgent, bug→medium, feature/how_to→low
+- DEC-051: Internal notes in same messages table with `is_internal_note` flag — simpler than separate table, filtered out in tenant-facing API
+- DEC-052: File attachments stored in MinIO/S3 with presigned download URLs — 10MB limit, MIME type allowlist, metadata in DB
+- DEC-053: Inbound email webhook uses subject line `[T-XXX]` pattern for reply threading + email message ID for deduplication
+
+### Next Steps (Priority Order)
+1. **Auth Migration Phase 2** — Products implement callback handler to accept OpShield JWTs
+2. **Authenticated E2E tests** — Full login/admin/account/support flows with Playwright
+3. **Product-side support widget** — Help button in SafeSpec/Nexum that calls OpShield support API
+
 ## [Unreleased] — Phase 13: Self-Service Portal, Orphan Cleanup, E2E Tests
 
 ### Added
@@ -41,12 +123,12 @@ All notable changes to OpShield are documented here.
 ### Decisions
 - DEC-045: Self-service billing uses Stripe Billing Portal (not custom UI) — Stripe handles PCI compliance, payment method changes, and invoice PDFs. We redirect users to Stripe's hosted portal.
 - DEC-046: Orphan cleanup runs as in-process setInterval (not external cron) — simple enough for current scale, avoids infrastructure dependency. Can migrate to a job queue later if needed.
-- DEC-047: E2E tests focus on page accessibility and auth guards first — authenticated flow tests deferred until test user seeding is automated.
+- DEC-047: E2E tests focus on page accessibility and auth guards first — authenticated flow tests deferred until test infrastructure is set up.
 
 ### Next Steps (Priority Order)
 1. **Support Hub** (docs/06) — DB schema (tickets, messages), API routes, email processing, admin UI
 2. **Auth Migration Phase 2** — Products implement callback handler to accept OpShield JWTs
-3. **Authenticated E2E tests** — Test user seeding + full login/admin/account flows with Playwright
+3. **Authenticated E2E tests** — Full login/admin/account flows with Playwright
 
 ## [Unreleased] — Phase 12: Platform Admin Completion, Email Templates, Auth Prep
 
@@ -398,7 +480,7 @@ All notable changes to OpShield are documented here.
 - `@fastify/helmet` for security headers (DEC-023)
 - Zod type provider (validatorCompiler/serializerCompiler) on Fastify app
 - Shared schemas: updateTenantSchema, tenantResponseSchema, tenantListQuerySchema, tenantIdParamSchema
-- Database seed script with plans (9 plans across 3 tiers), test tenant "Demo Haulage Pty Ltd", test user, platform admin
+- Plan pricing data (9 plans across 3 tiers) inserted via migration
 - Unit tests for tenant and entitlements routes (auth guard verification)
 - Database migrations generated and applied (15 tables total)
 

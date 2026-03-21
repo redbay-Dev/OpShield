@@ -341,9 +341,51 @@ Every architectural, product, and workflow decision is recorded here with ration
 
 ### DEC-047: E2E tests focus on page accessibility and auth guards first
 **Date:** 2026-03-21
-**Context:** Need E2E tests but the app requires authenticated sessions (2FA mandatory) for most flows. Test user seeding and login automation require additional setup.
-**Decision:** First round of E2E tests covers: public page loading, form field presence, auth guard redirects for all protected routes. Full authenticated flow tests deferred until test user seeding is automated.
+**Context:** Need E2E tests but the app requires authenticated sessions (2FA mandatory) for most flows. Login automation requires additional setup.
+**Decision:** First round of E2E tests covers: public page loading, form field presence, auth guard redirects for all protected routes. Full authenticated flow tests deferred until test infrastructure is set up.
 **Rationale:** Getting 24 E2E tests running immediately validates routing, page rendering, and security (auth redirects) without blocking on test infrastructure. Authenticated tests will follow once a test user + session fixture is set up.
 **Alternatives considered:** Skip E2E tests entirely until infrastructure is ready (leaves zero coverage); mock auth in tests (doesn't test real behaviour).
+
+### DEC-048: Support tickets via both API and inbound email webhook
+**Date:** 2026-03-21
+**Context:** The spec describes two ticket creation methods: API (product backends call OpShield) and inbound email (email provider webhook). Both are needed for a complete support system.
+**Decision:** Both methods implemented from day one. API via service key auth for product backends, webhook endpoint at `/api/webhooks/inbound-email` for email providers (SMTP2GO, Mailgun, Postmark).
+**Rationale:** Email-based support is the primary user experience per the spec — users never log into OpShield. Implementing both ensures the system works regardless of how tickets arrive.
+**Alternatives considered:** API only (incomplete user experience); email only (no programmatic access for products).
+
+### DEC-049: Ticket numbers use PostgreSQL sequence
+**Date:** 2026-03-21
+**Context:** Need human-readable ticket IDs (T-001, T-089) for email threading and user reference. Options: application-side counter, UUID prefix, PostgreSQL sequence.
+**Decision:** Use `CREATE SEQUENCE support_ticket_seq` with `nextval()` to generate sequential ticket numbers formatted as `T-XXX`.
+**Rationale:** PostgreSQL sequences are atomic, gap-free under normal operation, and don't require application-level locking. The `T-` prefix makes ticket numbers unambiguous in email subjects and conversation.
+**Alternatives considered:** Application-level counter with DB lock (more complex, race conditions); random short IDs (not human-friendly).
+
+### DEC-050: Auto-priority based on plan tier and category
+**Date:** 2026-03-21
+**Context:** Tickets need a default priority. Admins can override, but the initial priority should reflect business importance — enterprise customers and billing issues should surface first.
+**Decision:** Auto-priority logic: enterprise plan→high, billing+past_due→urgent, bug_report→medium, feature_request/how_to→low, default→medium. Admins can manually override via PATCH.
+**Rationale:** Matches the SLA targets in the spec. Enterprise tenants pay more and expect faster response. Billing issues for past_due accounts are time-sensitive (risk of churn).
+**Alternatives considered:** All tickets start as medium (misses urgency); ML-based priority (over-engineered for current volume).
+
+### DEC-051: Internal notes as a flag on support_messages
+**Date:** 2026-03-21
+**Context:** Admins need to add internal notes that are visible only to other admins, not to the customer. Options: separate `internal_notes` table, or `is_internal_note` boolean flag on the messages table.
+**Decision:** Single `support_messages` table with `is_internal_note` boolean. Tenant-facing API filters these out; admin API includes them.
+**Rationale:** Keeps conversation chronology in one table, simpler queries, no joins needed. Filtering is trivial with a WHERE clause.
+**Alternatives considered:** Separate table (more complex, harder to show chronological thread).
+
+### DEC-052: File attachments via MinIO/S3 with presigned download URLs
+**Date:** 2026-03-21
+**Context:** The spec includes file attachments on tickets. Need to handle file upload, storage, and download securely.
+**Decision:** Attachments uploaded via multipart form to MinIO/S3 (using `@aws-sdk/client-s3` with `forcePathStyle` for MinIO compatibility). Downloads use 15-minute presigned URLs. MIME type allowlist (images, PDF, text, CSV, Excel, Word) with 10MB size limit enforced at both Fastify multipart config and route handler level.
+**Rationale:** Presigned URLs avoid proxying file content through the API server. MIME type allowlist prevents executable uploads. MinIO is already configured in the dev environment.
+**Alternatives considered:** Store files as base64 in DB (doesn't scale); proxy downloads through API (unnecessary load on API server).
+
+### DEC-053: Inbound email threading via subject line pattern + message ID dedup
+**Date:** 2026-03-21
+**Context:** Email replies need to be threaded back to the correct ticket. Email providers forward parsed emails but threading metadata varies by provider.
+**Decision:** Primary threading: parse `[T-XXX]` from subject line. Deduplication: check `emailMessageId` to prevent duplicate messages from provider retries. Fallback for new tickets without tenant headers: look up sender's existing tickets to resolve tenant.
+**Rationale:** Subject line pattern is universal across all email clients and providers. Message ID dedup is essential since webhook providers may retry on timeout.
+**Alternatives considered:** Use Reply-To plus-addressing only (requires DNS setup for `support+T-089@redbay.com.au`); In-Reply-To header matching (not all providers forward this).
 
 ---
