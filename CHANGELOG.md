@@ -2,6 +2,36 @@
 
 All notable changes to OpShield are documented here.
 
+## [Unreleased] — Phase 7: Outbound Webhooks + Usage Reporting
+
+### Added
+- **Outbound webhook service**: HMAC-SHA256 signed webhooks dispatched to product backends (SafeSpec, Nexum) on module and tenant lifecycle events — `module.activated`, `module.suspended`, `module.cancelled`, `tenant.suspended`, `tenant.cancelled`, `tenant.reactivated`, `user_count.updated`
+- **Webhook delivery logging**: `webhook_deliveries` table (append-only) tracks every outbound webhook with HTTP status, error details, and full payload for debugging
+- **Usage reporting endpoint**: `POST /api/v1/usage` — service-key authenticated endpoint for products to report user counts per module, with cross-product validation and automatic `currentUsers` sync
+- **Webhook dispatch in module routes**: Module add/update/delete operations now notify affected products in real-time
+- **Webhook dispatch in Stripe webhook handlers**: Subscription deletion dispatches `tenant.cancelled`, payment failure dispatches `tenant.suspended`, checkout completion dispatches `tenant.reactivated` (when reactivating a suspended tenant)
+- **Usage report schema**: `usageReportSchema` in shared package for validation
+- **Webhook config**: Per-product webhook URL and secret configuration
+- **DB migration**: `0003_webhook_deliveries` — creates `webhook_deliveries` table
+
+### Decisions
+- DEC-032: Fire-and-forget webhook dispatch (no retry queue in v1)
+- DEC-033: HMAC-SHA256 webhook signatures with timestamp replay protection
+
+### Still Missing
+- Webhook receiver endpoints in SafeSpec (`/api/webhooks/opshield`) and Nexum — products need to implement signature verification and event handling
+- Webhook retry/backoff queue (deferred to v2 — current approach logs failures to DB)
+- Admin UI for viewing webhook delivery logs
+- Tests for webhook service (`signPayload`, `dispatchWebhook`) and usage route
+- Webhook secret generation tooling (currently must be set manually in `.env`)
+
+### Next Steps
+- Implement webhook receiver in SafeSpec and Nexum (see `docs/03-INTEGRATION-ARCHITECTURE.md` for contract)
+- Add unit tests for `services/webhook.ts` (signature generation, skip-when-empty-secret logic)
+- Add integration test for `POST /api/v1/usage` route
+- Consider admin dashboard panel for webhook delivery log visibility
+- Begin Phase 8 work per project roadmap
+
 ## [Unreleased] — Phase 6: Billing UI + Invoice API
 
 ### Added

@@ -11,6 +11,7 @@ import {
   tenantIdParamSchema,
 } from "@opshield/shared/schemas";
 import { SAFESPEC_MODULES, NEXUM_MODULES } from "@opshield/shared/constants";
+import { dispatchWebhook } from "../services/webhook.js";
 
 /** All valid module IDs by product */
 const VALID_MODULES: Record<string, ReadonlySet<string>> = {
@@ -160,6 +161,13 @@ export async function moduleRoutes(app: FastifyInstance): Promise<void> {
         metadata: { tenantId, productId, moduleId, maxUsers, status },
       });
 
+      dispatchWebhook("module.activated", tenantId, {
+        productId,
+        moduleId,
+        maxUsers,
+        status,
+      });
+
       return reply.status(201).send({
         success: true,
         data: formatModule(mod),
@@ -246,6 +254,25 @@ export async function moduleRoutes(app: FastifyInstance): Promise<void> {
         resourceId: updated.id,
         metadata: { tenantId, moduleId, updates },
       });
+
+      // Dispatch webhook based on status transition
+      if (updates.status && updates.status !== existing.status) {
+        const eventMap: Record<string, "module.suspended" | "module.cancelled" | "module.activated"> = {
+          suspended: "module.suspended",
+          cancelled: "module.cancelled",
+          active: "module.activated",
+          trial: "module.activated",
+        };
+        const event = eventMap[updates.status];
+        if (event) {
+          dispatchWebhook(event, tenantId, {
+            productId: existing.productId,
+            moduleId,
+            previousStatus: existing.status,
+            newStatus: updates.status,
+          });
+        }
+      }
 
       return reply.send({
         success: true,
@@ -345,6 +372,11 @@ export async function moduleRoutes(app: FastifyInstance): Promise<void> {
           productId: existing.productId,
           moduleId,
         },
+      });
+
+      dispatchWebhook("module.cancelled", tenantId, {
+        productId: existing.productId,
+        moduleId,
       });
 
       return reply.send({ success: true });

@@ -52,5 +52,15 @@ export const config = {
     nexum: process.env.NEXUM_URL ?? "http://localhost:5171",
     safespec: process.env.SAFESPEC_URL ?? "http://localhost:5172",
   },
+  webhooks: {
+    nexum: {
+      url: process.env.WEBHOOK_NEXUM_URL ?? "",
+      secret: process.env.WEBHOOK_NEXUM_SECRET ?? "",
+    },
+    safespec: {
+      url: process.env.WEBHOOK_SAFESPEC_URL ?? "",
+      secret: process.env.WEBHOOK_SAFESPEC_SECRET ?? "",
+    },
+  },
   logLevel: process.env.LOG_LEVEL ?? "info",
 } as const;

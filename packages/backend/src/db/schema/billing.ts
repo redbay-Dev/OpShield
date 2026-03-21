@@ -132,6 +132,25 @@ export const billingEvents = pgTable("billing_events", {
 });
 
 /**
+ * Append-only webhook delivery log.
+ * Tracks every outbound webhook sent to products for debugging and audit.
+ */
+export const webhookDeliveries = pgTable("webhook_deliveries", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  productId: varchar("product_id", { length: 50 }).notNull(),
+  eventType: varchar("event_type", { length: 100 }).notNull(),
+  tenantId: uuid("tenant_id")
+    .notNull()
+    .references(() => tenants.id),
+  httpStatus: integer("http_status"),
+  error: text("error"),
+  payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
  * Invoice records synced from Stripe.
  */
 export const invoices = pgTable("invoices", {

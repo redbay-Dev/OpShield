@@ -9,6 +9,7 @@ import {
 } from "../db/schema/billing.js";
 import { tenants, auditLog } from "../db/schema/tenants.js";
 import { constructWebhookEvent } from "../services/stripe.js";
+import { dispatchWebhook } from "../services/webhook.js";
 
 /**
  * Extract subscription ID from an invoice's parent field (Stripe v2025-08-27+).
@@ -97,6 +98,14 @@ async function handleCheckoutCompleted(
     ? session.subscription
     : session.subscription?.id ?? null;
 
+  // Capture tenant status before update for reactivation detection
+  const [tenantBefore] = await db
+    .select({ status: tenants.status })
+    .from(tenants)
+    .where(eq(tenants.id, tenantId))
+    .limit(1);
+  const wasSuspended = tenantBefore?.status === "suspended";
+
   if (stripeSubId) {
     await db
       .update(subscriptions)
@@ -107,6 +116,12 @@ async function handleCheckoutCompleted(
       .update(tenants)
       .set({ status: "active", updatedAt: new Date() })
       .where(eq(tenants.id, tenantId));
+  }
+
+  if (wasSuspended) {
+    dispatchWebhook("tenant.reactivated", tenantId, {
+      subscriptionId: stripeSubId,
+    });
   }
 
   await logBillingEvent({
@@ -225,6 +240,11 @@ async function handleInvoicePaymentFailed(
       .where(eq(subscriptions.stripeSubscriptionId, stripeSubId));
   }
 
+  dispatchWebhook("tenant.suspended", tenantId, {
+    reason: "payment_failed",
+    subscriptionId: stripeSubId,
+  });
+
   await logBillingEvent({
     tenantId,
     eventType: event.type,
@@ -312,6 +332,10 @@ async function handleSubscriptionDeleted(
       .update(tenants)
       .set({ status: "suspended", updatedAt: new Date() })
       .where(eq(tenants.id, tenantId));
+
+    dispatchWebhook("tenant.cancelled", tenantId, {
+      subscriptionId: sub.id,
+    });
   }
 
   await logBillingEvent({

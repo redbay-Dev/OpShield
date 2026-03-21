@@ -171,6 +171,18 @@ export const subscriptionResponseSchema = z.object({
 
 export type SubscriptionResponse = z.infer<typeof subscriptionResponseSchema>;
 
+/** Usage report submitted by product backends */
+export const usageReportSchema = z.object({
+  tenantId: z.string().uuid(),
+  productId: z.enum(["safespec", "nexum"]),
+  moduleId: z.string().min(1).max(50),
+  metric: z.literal("user_count"),
+  value: z.number().int().min(0),
+  breakdown: z.record(z.string(), z.unknown()).optional(),
+});
+
+export type UsageReportInput = z.infer<typeof usageReportSchema>;
+
 /** Invoice response schema */
 export const invoiceResponseSchema = z.object({
   id: z.string().uuid(),

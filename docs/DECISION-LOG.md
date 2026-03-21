@@ -234,4 +234,18 @@ Every architectural, product, and workflow decision is recorded here with ration
 **Rationale:** Price sync is a rare admin operation (only when plans change), not a runtime API call. A script is simpler, safer (no accidental triggers), and can be run with full visibility into what's being created. No auth/permission complexity needed.
 **Alternatives considered:** Admin API endpoint (adds auth complexity for a rarely-used operation, risk of accidental invocation); manual Stripe dashboard configuration (error-prone, no DB sync, doesn't scale).
 
+### DEC-032: Fire-and-forget webhook dispatch (no retry queue in v1)
+**Date:** 2026-03-21
+**Context:** Outbound webhooks to product backends need a dispatch strategy. Options range from simple fire-and-forget to full retry queues with exponential backoff.
+**Decision:** Webhooks are dispatched asynchronously via fire-and-forget (`void` return from `dispatchWebhook`). Errors are logged to the `webhook_deliveries` table but never thrown to callers. No retry queue in v1. Webhook dispatch is skipped silently if the product's webhook secret is empty (dev mode).
+**Rationale:** Products already poll entitlements on startup and periodically — webhooks are a performance optimization, not the sole source of truth. A retry queue adds infrastructure complexity (Redis/BullMQ) disproportionate to the current single-developer setup. The delivery log provides full observability for debugging missed webhooks. Can add retries in v2 if reliability becomes a concern.
+**Alternatives considered:** Synchronous dispatch (blocks the API response on external HTTP call); Redis-backed retry queue (infrastructure complexity for v1); webhook delivery guarantee with idempotency keys (over-engineered for current scale).
+
+### DEC-033: HMAC-SHA256 webhook signatures with timestamp replay protection
+**Date:** 2026-03-21
+**Context:** Products need to verify that incoming webhooks are genuinely from OpShield, not forged by attackers.
+**Decision:** Webhook payloads are signed with HMAC-SHA256 using per-product secrets. Signature format: `t=<unix_timestamp>,v1=<hmac>` where the signed content is `<timestamp>.<json_body>`. Products verify by recomputing the HMAC and rejecting timestamps older than 5 minutes.
+**Rationale:** Follows Stripe's proven webhook signature scheme — well-documented, easy to implement in any language, includes timestamp to prevent replay attacks. Per-product secrets limit blast radius of a key compromise.
+**Alternatives considered:** Shared secret across all products (key compromise affects all products); asymmetric signatures with RSA/EdDSA (more complex verification, unnecessary when we control both ends); IP allowlisting (fragile, doesn't work in dev).
+
 ---
