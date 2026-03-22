@@ -39,6 +39,7 @@ export function SsoTab({ tenantId }: SsoTabProps): React.JSX.Element {
   const [clientSecret, setClientSecret] = useState("");
   const [azureTenantId, setAzureTenantId] = useState("");
   const [enforced, setEnforced] = useState(false);
+  const [domainsText, setDomainsText] = useState("");
   const [error, setError] = useState("");
 
   const existingProvider = providers?.[0];
@@ -49,11 +50,13 @@ export function SsoTab({ tenantId }: SsoTabProps): React.JSX.Element {
       setClientSecret("");
       setAzureTenantId(existingProvider.tenantIdAzure ?? "");
       setEnforced(existingProvider.enforced);
+      setDomainsText((existingProvider.domains ?? []).join(", "));
     } else {
       setClientId("");
       setClientSecret("");
       setAzureTenantId("");
       setEnforced(false);
+      setDomainsText("");
     }
     setError("");
     setDialogOpen(true);
@@ -68,6 +71,11 @@ export function SsoTab({ tenantId }: SsoTabProps): React.JSX.Element {
       return;
     }
 
+    const domains = domainsText
+      .split(",")
+      .map((d) => d.trim().toLowerCase())
+      .filter(Boolean);
+
     try {
       await upsertMutation.mutateAsync({
         provider: "microsoft",
@@ -75,6 +83,7 @@ export function SsoTab({ tenantId }: SsoTabProps): React.JSX.Element {
         clientSecret,
         tenantIdAzure: azureTenantId,
         enforced,
+        domains,
       });
       setDialogOpen(false);
     } catch {
@@ -146,6 +155,18 @@ export function SsoTab({ tenantId }: SsoTabProps): React.JSX.Element {
                 <p>{new Date(existingProvider.createdAt).toLocaleDateString()}</p>
               </div>
             </div>
+            {existingProvider.domains && existingProvider.domains.length > 0 && (
+              <div className="text-sm">
+                <span className="text-muted-foreground">Email Domains:</span>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {existingProvider.domains.map((domain) => (
+                    <Badge key={domain} variant="secondary" className="text-xs">
+                      @{domain}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="flex gap-2 pt-2">
               {canCreate && (
@@ -208,6 +229,18 @@ export function SsoTab({ tenantId }: SsoTabProps): React.JSX.Element {
                 onChange={(e) => setAzureTenantId(e.target.value)}
                 placeholder="00000000-0000-0000-0000-000000000000"
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="sso-domains">Email Domains</Label>
+              <Input
+                id="sso-domains"
+                value={domainsText}
+                onChange={(e) => setDomainsText(e.target.value)}
+                placeholder="company.com, subsidiary.com"
+              />
+              <p className="text-xs text-muted-foreground">
+                Comma-separated list of email domains. Users with these domains will be routed to this SSO provider.
+              </p>
             </div>
             <div className="flex items-center gap-2">
               <Checkbox

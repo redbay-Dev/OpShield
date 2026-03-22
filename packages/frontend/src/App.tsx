@@ -21,6 +21,7 @@ import { RevenuePage } from "@frontend/pages/admin/revenue.js";
 import { SupportTicketsPage } from "@frontend/pages/admin/support-tickets.js";
 import { SupportTicketDetailPage } from "@frontend/pages/admin/support-ticket-detail.js";
 import { AdminManagementPage } from "@frontend/pages/admin/admin-management.js";
+import { PlansPage } from "@frontend/pages/admin/plans.js";
 import { LandingPage } from "@frontend/pages/public/landing.js";
 import { PricingPage } from "@frontend/pages/public/pricing.js";
 import { StepAccountPage } from "@frontend/pages/signup/step-account.js";
@@ -108,6 +109,7 @@ export function App(): React.JSX.Element {
               path="admin/support/:ticketNumber"
               element={<SupportTicketDetailPage />}
             />
+            <Route path="admin/plans" element={<PlansPage />} />
             <Route
               path="admin/admins"
               element={<AdminManagementPage />}

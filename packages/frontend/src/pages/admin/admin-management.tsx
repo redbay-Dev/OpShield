@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Loader2, Shield, ShieldAlert, Eye, Trash2, UserPlus } from "lucide-react";
 import { Button } from "@frontend/components/ui/button.js";
 import { Input } from "@frontend/components/ui/input.js";
@@ -75,9 +76,11 @@ export function AdminManagementPage(): React.JSX.Element {
       void queryClient.invalidateQueries({ queryKey: ["platform-admins"] });
       setPromoteEmail("");
       setError("");
+      toast.success("Admin added");
     },
     onError: (err: Error) => {
       setError(err.message);
+      toast.error(err.message);
     },
   });
 
@@ -87,9 +90,11 @@ export function AdminManagementPage(): React.JSX.Element {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["platform-admins"] });
+      toast.success("Role updated");
     },
     onError: (err: Error) => {
       setError(err.message);
+      toast.error(err.message);
     },
   });
 
@@ -99,9 +104,11 @@ export function AdminManagementPage(): React.JSX.Element {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["platform-admins"] });
+      toast.success("Admin removed");
     },
     onError: (err: Error) => {
       setError(err.message);
+      toast.error(err.message);
     },
   });
 
@@ -209,11 +216,7 @@ export function AdminManagementPage(): React.JSX.Element {
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => {
-                      if (window.confirm(`Remove ${admin.name} (${admin.email}) as platform admin?`)) {
-                        void removeMutation.mutate(admin.id);
-                      }
-                    }}
+                    onClick={() => void removeMutation.mutate(admin.id)}
                   >
                     <Trash2 className="h-4 w-4 text-destructive" />
                   </Button>

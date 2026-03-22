@@ -366,6 +366,7 @@ export const upsertSsoProviderSchema = z.object({
   clientSecret: z.string().min(1),
   tenantIdAzure: z.string().min(1).max(255),
   enforced: z.boolean().default(false),
+  domains: z.array(z.string().min(1).max(255)).default([]),
 });
 
 export type UpsertSsoProviderInput = z.infer<typeof upsertSsoProviderSchema>;
@@ -398,6 +399,7 @@ export const ssoProviderResponseSchema = z.object({
   clientId: z.string(),
   tenantIdAzure: z.string().nullable(),
   enforced: z.boolean(),
+  domains: z.array(z.string()).default([]),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

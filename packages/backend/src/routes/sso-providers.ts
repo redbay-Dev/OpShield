@@ -12,6 +12,8 @@ import {
 function formatProvider(
   row: typeof tenantSsoProviders.$inferSelect,
 ): Record<string, unknown> {
+  const meta = row.metadata as Record<string, unknown> | null;
+  const domains = Array.isArray(meta?.domains) ? (meta.domains as string[]) : [];
   return {
     id: row.id,
     tenantId: row.tenantId,
@@ -19,6 +21,7 @@ function formatProvider(
     clientId: row.clientId,
     tenantIdAzure: row.tenantIdAzure,
     enforced: row.enforced,
+    domains,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -72,7 +75,7 @@ export async function ssoProviderRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const { tenantId } = paramParsed.data;
-      const { provider, clientId, clientSecret, tenantIdAzure, enforced } = bodyParsed.data;
+      const { provider, clientId, clientSecret, tenantIdAzure, enforced, domains } = bodyParsed.data;
 
       // Verify tenant exists
       const [tenant] = await db
@@ -110,6 +113,7 @@ export async function ssoProviderRoutes(app: FastifyInstance): Promise<void> {
             clientSecret,
             tenantIdAzure,
             enforced,
+            metadata: { domains },
             updatedAt: new Date(),
           })
           .where(eq(tenantSsoProviders.id, existing.id))
@@ -125,6 +129,7 @@ export async function ssoProviderRoutes(app: FastifyInstance): Promise<void> {
             clientSecret,
             tenantIdAzure,
             enforced,
+            metadata: { domains },
           })
           .returning();
         result = created!;

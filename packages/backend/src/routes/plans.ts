@@ -2,8 +2,10 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import { eq } from "drizzle-orm";
 import { z } from "zod/v4";
 import { db } from "../db/client.js";
-import { plans } from "../db/schema/billing.js";
+import { plans, subscriptionItems } from "../db/schema/billing.js";
 import { auditLog } from "../db/schema/tenants.js";
+import { syncPlanToStripe } from "../services/stripe.js";
+import { config } from "../config.js";
 import {
   requirePlatformAdmin,
   requireWriteAccess,
@@ -57,7 +59,7 @@ function formatPlan(plan: typeof plans.$inferSelect): Record<string, unknown> {
 }
 
 export async function planRoutes(app: FastifyInstance): Promise<void> {
-  // ── GET /plans — List all plans (admin) ──
+  // ── GET /plans/admin — List all plans (admin) ──
   app.get(
     "/plans/admin",
     { preHandler: [requirePlatformAdmin] },
@@ -125,6 +127,40 @@ export async function planRoutes(app: FastifyInstance): Promise<void> {
         resourceId: plan.id,
         metadata: { name: plan.name, productId: plan.productId, moduleId: plan.moduleId },
       });
+
+      // Auto-sync to Stripe if key is configured
+      if (config.stripe.secretKey && !config.stripe.secretKey.startsWith("sk_test_placeholder")) {
+        try {
+          const stripeIds = await syncPlanToStripe(plan);
+          await db
+            .update(plans)
+            .set({
+              stripePriceId: stripeIds.stripePriceId,
+              stripePerUserPriceId: stripeIds.stripePerUserPriceId,
+              updatedAt: new Date(),
+            })
+            .where(eq(plans.id, plan.id));
+
+          // Re-fetch with Stripe IDs
+          const [updated] = await db
+            .select()
+            .from(plans)
+            .where(eq(plans.id, plan.id))
+            .limit(1);
+
+          return reply.status(201).send({
+            success: true,
+            data: formatPlan(updated ?? plan),
+          });
+        } catch {
+          // Stripe sync failed — return plan without Stripe IDs
+          // Plan is still usable, just needs manual sync later
+          return reply.status(201).send({
+            success: true,
+            data: formatPlan(plan),
+          });
+        }
+      }
 
       return reply.status(201).send({
         success: true,
@@ -208,6 +244,39 @@ export async function planRoutes(app: FastifyInstance): Promise<void> {
         metadata: { changes: updates },
       });
 
+      // Re-sync to Stripe if pricing changed and Stripe is configured
+      const pricingChanged = updates.basePrice !== undefined || updates.perUserPrice !== undefined;
+      if (
+        pricingChanged &&
+        config.stripe.secretKey &&
+        !config.stripe.secretKey.startsWith("sk_test_placeholder")
+      ) {
+        try {
+          const stripeIds = await syncPlanToStripe(updated);
+          await db
+            .update(plans)
+            .set({
+              stripePriceId: stripeIds.stripePriceId,
+              stripePerUserPriceId: stripeIds.stripePerUserPriceId,
+              updatedAt: new Date(),
+            })
+            .where(eq(plans.id, planId));
+
+          const [resynced] = await db
+            .select()
+            .from(plans)
+            .where(eq(plans.id, planId))
+            .limit(1);
+
+          return reply.send({
+            success: true,
+            data: formatPlan(resynced ?? updated),
+          });
+        } catch {
+          // Stripe sync failed — return plan as-is
+        }
+      }
+
       return reply.send({
         success: true,
         data: formatPlan(updated),
@@ -259,6 +328,71 @@ export async function planRoutes(app: FastifyInstance): Promise<void> {
         action: "plan.deactivated",
         resourceType: "plan",
         resourceId: planId,
+      });
+
+      return reply.send({ success: true });
+    },
+  );
+
+  // ── DELETE /plans/:planId/permanent — Hard delete plan (admin, delete access) ──
+  // Only allowed if no subscription items reference this plan.
+  app.delete(
+    "/plans/:planId/permanent",
+    { preHandler: [requirePlatformAdmin, requireDeleteAccess] },
+    async (request, reply) => {
+      const paramParsed = planIdParamSchema.safeParse(request.params);
+      if (!paramParsed.success) {
+        return reply.status(400).send({
+          success: false,
+          error: { code: "VALIDATION_ERROR", message: "Invalid plan ID" },
+        });
+      }
+
+      const { planId } = paramParsed.data;
+
+      const [existing] = await db
+        .select()
+        .from(plans)
+        .where(eq(plans.id, planId))
+        .limit(1);
+
+      if (!existing) {
+        return reply.status(404).send({
+          success: false,
+          error: { code: "NOT_FOUND", message: "Plan not found" },
+        });
+      }
+
+      // Check if any subscription items reference this plan
+      const [refCount] = await db
+        .select({ id: subscriptionItems.id })
+        .from(subscriptionItems)
+        .where(eq(subscriptionItems.planId, planId))
+        .limit(1);
+
+      if (refCount) {
+        return reply.status(409).send({
+          success: false,
+          error: {
+            code: "CONFLICT",
+            message: "Cannot delete — this plan is referenced by existing subscriptions. Deactivate it instead.",
+          },
+        });
+      }
+
+      await db.delete(plans).where(eq(plans.id, planId));
+
+      const admin = (
+        request as FastifyRequest & { platformAdmin: PlatformAdminAuth }
+      ).platformAdmin;
+
+      await db.insert(auditLog).values({
+        actorId: admin.userId,
+        actorType: "admin",
+        action: "plan.deleted",
+        resourceType: "plan",
+        resourceId: planId,
+        metadata: { name: existing.name, productId: existing.productId },
       });
 
       return reply.send({ success: true });

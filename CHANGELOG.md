@@ -2,6 +2,68 @@
 
 All notable changes to OpShield are documented here.
 
+## [Unreleased] — 2026-03-22: Plan Management, Stripe Auto-Sync, Toast Notifications, Bugfixes
+
+### Added
+
+#### Plan Management Admin Page (`/admin/plans`)
+- **Full CRUD** — Create, edit, deactivate, reactivate, and permanently delete billing plans.
+- **Multi-module batch creation** — Select any combination of modules from SafeSpec and Nexum, set individual pricing per module (base price, per-user price, included users), and create all plans in one go.
+- **Per-module pricing table** — Each selected module gets its own row with independent pricing inputs during creation.
+- **Permanent delete** — Hard-delete inactive plans that aren't referenced by existing subscriptions (`DELETE /plans/:planId/permanent`). Backend checks `subscription_items` FK before allowing deletion.
+- **Sidebar nav link** — "Plans" added to admin dashboard navigation with CreditCard icon.
+- **Stats cards** — Total plans, active plans, and products covered at a glance.
+- **Product filter** — Filter plan list by SafeSpec or Nexum.
+- **Stripe link indicator** — Badge shows whether each plan has a linked Stripe price ID.
+
+#### Stripe Auto-Sync
+- **Plans auto-sync to Stripe on creation** — `syncPlanToStripe()` in `services/stripe.ts` automatically creates Stripe Products and Prices when plans are created via the admin API. No manual `stripe:sync` script needed.
+- **Re-sync on pricing changes** — PATCH updates that change `basePrice` or `perUserPrice` re-sync to Stripe automatically.
+- **Graceful fallback** — If Stripe key isn't configured, plans create successfully without Stripe IDs (no crash).
+- **`findOrCreateStripePrice()`** — Reuses existing Stripe prices when amount/interval/currency match, avoids duplicates.
+
+#### SSO Domain-Based Discovery
+- **Email domains field** added to SSO provider configuration — admins can now specify which email domains (e.g., `company.com`) should be routed to a tenant's SSO provider.
+- **`domains` field** added to `upsertSsoProviderSchema` (shared) and `ssoProviderResponseSchema`.
+- **Backend wiring** — Domains stored in `metadata.domains` JSONB field, read by existing `GET /sso/discover` endpoint.
+- **Frontend display** — Configured domains shown as `@domain.com` badges on the SSO tab.
+- **Frontend input** — Comma-separated domain input in the SSO configuration dialog.
+
+#### Toast Notifications (Sonner)
+- **Fixed sonner component** — Removed broken `next-themes` import, set `position: "top-right"`.
+- **All mutations now use toast** — Success/error feedback via top-right toast notifications instead of inline error divs or browser `window.confirm` dialogs.
+- **Removed all `window.confirm`** — Zero browser dialogs remain. Deactivate/reactivate/delete actions fire directly with toast feedback.
+- **Admin management toasts** — Add, remove, role-change mutations now show toast notifications.
+
+### Fixed
+
+#### Public Pricing Page
+- **Added missing public `GET /plans` endpoint** — Was already in `signup.ts` but the `usePlans` hook had the wrong URL path. Verified the endpoint exists and returns active plans without sensitive fields (no Stripe IDs, no timestamps).
+- **Fixed `usePlans` hook double-unwrap** — `apiGet` already extracts `.data` from `{ success, data }`. The hook was doing `result.data` on the already-unwrapped array, returning `undefined`. Pricing page was silently showing "No pricing plans configured yet" even with plans in the DB.
+- **Fixed admin plans query** — Same double-unwrap bug. Admin plans table was always showing 0 plans.
+
+#### Plan Creation
+- **Price format auto-fix** — `formatDecimal()` converts user input (e.g., "49") to backend-required format ("49.00"). Was causing 400 "Invalid input" errors.
+
+### Decisions
+- DEC-063: SSO domain mapping stored in metadata JSONB (not a dedicated column) — discover endpoint already reads `metadata.domains`.
+
+### Still Missing
+- Per-tenant SSO login integration (discovery endpoint works, but login page doesn't call it yet to redirect users)
+- Notification preferences UI (schema exists, no settings page)
+- Deprovisioning final deletion background job (90-day schedule-deletion exists, but no cron to actually delete data after the grace period)
+- End-to-end test the full sign-up → checkout → provisioning flow with real Stripe test keys
+- Configure webhook URLs for Nexum/SafeSpec in `.env` to test provisioning
+
+### Next Steps (Priority Order)
+1. **Configure Stripe test keys** in `.env` and create plans via admin UI to verify auto-sync works
+2. **End-to-end test the sign-up flow** — account → 2FA → company/module selection → review → Stripe checkout → webhook → provisioning
+3. **Wire login page to SSO discovery** — Call `GET /sso/discover` on email blur, redirect to SSO if domain is enforced
+4. **Notification preferences UI** — Build the settings page using existing schema
+5. **Deprovisioning background job** — Cron to delete tenant data after 90-day grace period
+
+---
+
 ## [Unreleased] — 2026-03-22: Auth System Overhaul
 
 ### Fixed

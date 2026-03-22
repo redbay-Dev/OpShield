@@ -451,4 +451,11 @@ Every architectural, product, and workflow decision is recorded here with ration
 **Rationale:** CLAUDE.md rules alone weren't sufficient — agents ignored them. A hook provides hard enforcement at the tool level. Read access is preserved for debugging.
 **Alternatives considered:** Blanket block on all psql (too restrictive, prevents debugging); permission deny rules only (don't catch piped commands).
 
+### DEC-063: SSO domain mapping stored in metadata JSONB
+**Date:** 2026-03-22
+**Context:** The `GET /sso/discover` endpoint needs to match user email domains to SSO providers, but there's no `domains` column on `tenant_sso_providers`.
+**Decision:** Store email domains as `metadata.domains` (string array) in the existing JSONB `metadata` column rather than adding a dedicated column. The shared schema adds `domains` to `upsertSsoProviderSchema` and the backend writes it into metadata.
+**Rationale:** The metadata column already exists and is purpose-built for extensible config. Adding a dedicated column would require a migration for a simple array field. The discover endpoint already reads from `metadata.domains`.
+**Alternatives considered:** New `domains` text array column (requires migration, but provides better querying — acceptable trade-off for now since discovery queries all enforced providers anyway).
+
 ---

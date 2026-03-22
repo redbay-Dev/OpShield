@@ -142,6 +142,96 @@ export async function getStripeSubscription(
 }
 
 /**
+ * Sync a plan's pricing to Stripe.
+ * Creates or finds a Stripe Product and Price, then returns the price IDs.
+ * Called automatically when plans are created or updated via the admin API.
+ */
+export async function syncPlanToStripe(plan: {
+  name: string;
+  productId: string;
+  moduleId: string | null;
+  tier: string;
+  basePrice: string;
+  perUserPrice: string;
+  billingInterval: string;
+}): Promise<{ stripePriceId: string; stripePerUserPriceId: string | null }> {
+  const moduleId = plan.moduleId ?? "core";
+  const interval = plan.billingInterval === "annual" ? "year" : "month";
+
+  // Find or create a Stripe Product for this module
+  const existing = await stripe.products.search({
+    query: `metadata["moduleId"]:"${moduleId}" AND metadata["productId"]:"${plan.productId}"`,
+  });
+
+  let stripeProductId: string;
+  if (existing.data.length > 0 && existing.data[0]) {
+    stripeProductId = existing.data[0].id;
+  } else {
+    const product = await stripe.products.create({
+      name: `${plan.productId} - ${moduleId}`,
+      metadata: { moduleId, productId: plan.productId },
+    });
+    stripeProductId = product.id;
+  }
+
+  // Find or create base price
+  const baseCents = Math.round(Number(plan.basePrice) * 100);
+  const stripePriceId = await findOrCreateStripePrice(
+    stripeProductId,
+    baseCents,
+    interval as "month" | "year",
+    `${plan.name} - ${plan.tier} Base (${plan.billingInterval})`,
+  );
+
+  // Find or create per-user price (if applicable)
+  const perUserCents = Math.round(Number(plan.perUserPrice) * 100);
+  let stripePerUserPriceId: string | null = null;
+  if (perUserCents > 0) {
+    stripePerUserPriceId = await findOrCreateStripePrice(
+      stripeProductId,
+      perUserCents,
+      interval as "month" | "year",
+      `${plan.name} - ${plan.tier} Per User (${plan.billingInterval})`,
+    );
+  }
+
+  return { stripePriceId, stripePerUserPriceId };
+}
+
+async function findOrCreateStripePrice(
+  productId: string,
+  amountCents: number,
+  interval: "month" | "year",
+  nickname: string,
+): Promise<string> {
+  const existing = await stripe.prices.list({
+    product: productId,
+    type: "recurring",
+    active: true,
+    limit: 100,
+  });
+
+  const match = existing.data.find(
+    (p) =>
+      p.unit_amount === amountCents &&
+      p.recurring?.interval === interval &&
+      p.currency === "aud",
+  );
+
+  if (match) return match.id;
+
+  const price = await stripe.prices.create({
+    product: productId,
+    unit_amount: amountCents,
+    currency: "aud",
+    recurring: { interval },
+    nickname,
+  });
+
+  return price.id;
+}
+
+/**
  * Verify a webhook signature and construct the event.
  */
 export function constructWebhookEvent(
