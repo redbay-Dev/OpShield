@@ -1,11 +1,12 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { z } from "zod/v4";
 import { db } from "../db/client.js";
 import { plans, subscriptionItems } from "../db/schema/billing.js";
 import { auditLog } from "../db/schema/tenants.js";
 import { syncPlanToStripe, stripe } from "../services/stripe.js";
 import { config } from "../config.js";
+import { PRODUCT_CONFIG } from "@opshield/shared/constants";
 import {
   requirePlatformAdmin,
   requireWriteAccess,
@@ -400,6 +401,7 @@ export async function planRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // ── GET /plans/admin/reconciliation — Compare DB plans vs Stripe ──
+  // Simple: each plan has one Stripe price. Either it's synced or it's not.
   app.get(
     "/plans/admin/reconciliation",
     { preHandler: [requirePlatformAdmin] },
@@ -419,58 +421,17 @@ export async function planRoutes(app: FastifyInstance): Promise<void> {
         .from(plans)
         .orderBy(plans.productId, plans.moduleId, plans.tier);
 
-      // Fetch all Stripe products and prices
-      const stripeProducts: Array<{
-        id: string;
-        name: string;
-        metadata: Record<string, string>;
-        active: boolean;
-      }> = [];
-      for await (const product of stripe.products.list({ limit: 100, active: true })) {
-        stripeProducts.push({
-          id: product.id,
-          name: product.name,
-          metadata: product.metadata,
-          active: product.active,
-        });
-      }
-
-      const stripePrices: Array<{
-        id: string;
-        productId: string;
-        unitAmount: number | null;
-        currency: string;
-        interval: string | null;
-        nickname: string | null;
-        active: boolean;
-      }> = [];
+      // Fetch all active Stripe prices to validate references
+      const activeStripePriceIds = new Set<string>();
       for await (const price of stripe.prices.list({ limit: 100, active: true })) {
-        stripePrices.push({
-          id: price.id,
-          productId: typeof price.product === "string" ? price.product : price.product.id,
-          unitAmount: price.unit_amount,
-          currency: price.currency,
-          interval: price.recurring?.interval ?? null,
-          nickname: price.nickname,
-          active: price.active,
-        });
+        activeStripePriceIds.add(price.id);
       }
 
-      // Build Stripe price lookup by ID
-      const stripePriceMap = new Map(stripePrices.map((p) => [p.id, p]));
-
-      // Categorise plans
-      const missingStripePrice: Array<Record<string, unknown>> = [];
-      const missingPerUserPrice: Array<Record<string, unknown>> = [];
-      const priceMismatches: Array<Record<string, unknown>> = [];
+      // Categorise every plan
       const synced: Array<Record<string, unknown>> = [];
+      const broken: Array<Record<string, unknown>> = [];
+      const unsynced: Array<Record<string, unknown>> = [];
       const inactive: Array<Record<string, unknown>> = [];
-      const missingAnnualVariant: Array<Record<string, unknown>> = [];
-
-      // Build map of existing plan combos for annual variant check
-      const planCombos = new Set(
-        allPlans.map((p) => `${p.productId}|${p.moduleId}|${p.tier}|${p.billingInterval}`),
-      );
 
       for (const plan of allPlans) {
         const planData = formatPlan(plan);
@@ -480,98 +441,33 @@ export async function planRoutes(app: FastifyInstance): Promise<void> {
           continue;
         }
 
-        // Check for missing annual variant
-        if (plan.billingInterval === "monthly") {
-          const annualKey = `${plan.productId}|${plan.moduleId}|${plan.tier}|annual`;
-          if (!planCombos.has(annualKey)) {
-            missingAnnualVariant.push(planData);
-          }
-        }
-
-        // Check Stripe base price linkage
         if (!plan.stripePriceId) {
-          missingStripePrice.push(planData);
-          continue;
+          // No Stripe price ID at all
+          unsynced.push(planData);
+        } else if (!activeStripePriceIds.has(plan.stripePriceId)) {
+          // Has a Stripe price ID but it doesn't exist in Stripe anymore
+          broken.push({ ...planData, issue: "Stripe price deleted/archived" });
+        } else {
+          synced.push(planData);
         }
-
-        // Check per-user price linkage (if plan has per-user pricing)
-        const perUserCents = Math.round(Number(plan.perUserPrice) * 100);
-        if (perUserCents > 0 && !plan.stripePerUserPriceId) {
-          missingPerUserPrice.push(planData);
-        }
-
-        // Verify Stripe price still exists and amount matches
-        const stripePrice = stripePriceMap.get(plan.stripePriceId);
-        if (!stripePrice) {
-          missingStripePrice.push({
-            ...planData,
-            issue: "stripePriceId references deleted/archived Stripe price",
-          });
-          continue;
-        }
-
-        const expectedCents = Math.round(Number(plan.basePrice) * 100);
-        const expectedInterval =
-          plan.billingInterval === "annual" ? "year" : "month";
-
-        if (
-          stripePrice.unitAmount !== expectedCents ||
-          stripePrice.interval !== expectedInterval
-        ) {
-          priceMismatches.push({
-            ...planData,
-            stripeAmount: stripePrice.unitAmount,
-            expectedAmount: expectedCents,
-            stripeInterval: stripePrice.interval,
-            expectedInterval,
-          });
-          continue;
-        }
-
-        synced.push(planData);
       }
 
-      // Find orphaned Stripe prices (prices not referenced by any DB plan)
-      const referencedPriceIds = new Set(
-        allPlans
-          .flatMap((p) => [p.stripePriceId, p.stripePerUserPriceId])
-          .filter((id): id is string => id !== null && id !== undefined),
-      );
-
-      const orphanedStripePrices = stripePrices
-        .filter((p) => !referencedPriceIds.has(p.id))
-        .map((p) => ({
-          priceId: p.id,
-          productId: p.productId,
-          unitAmount: p.unitAmount,
-          currency: p.currency,
-          interval: p.interval,
-          nickname: p.nickname,
-          productName: stripeProducts.find((sp) => sp.id === p.productId)?.name ?? "Unknown",
-        }));
+      const activePlans = allPlans.filter((p) => p.isActive === "true").length;
 
       return reply.send({
         success: true,
         data: {
           summary: {
-            totalDbPlans: allPlans.length,
-            activePlans: allPlans.filter((p) => p.isActive === "true").length,
-            syncedToStripe: synced.length,
-            missingStripePrice: missingStripePrice.length,
-            missingPerUserPrice: missingPerUserPrice.length,
-            priceMismatches: priceMismatches.length,
-            missingAnnualVariant: missingAnnualVariant.length,
-            orphanedStripePrices: orphanedStripePrices.length,
-            inactivePlans: inactive.length,
-            totalStripePrices: stripePrices.length,
-            totalStripeProducts: stripeProducts.length,
+            totalPlans: allPlans.length,
+            activePlans,
+            synced: synced.length,
+            broken: broken.length,
+            unsynced: unsynced.length,
+            inactive: inactive.length,
           },
           synced,
-          missingStripePrice,
-          missingPerUserPrice,
-          priceMismatches,
-          missingAnnualVariant,
-          orphanedStripePrices,
+          broken,
+          unsynced,
           inactive,
         },
       });
@@ -679,12 +575,6 @@ export async function planRoutes(app: FastifyInstance): Promise<void> {
         .from(plans)
         .where(eq(plans.isActive, "true"));
 
-      // Fetch ALL active Stripe prices to validate existing references
-      const activeStripePriceIds = new Set<string>();
-      for await (const price of stripe.prices.list({ limit: 100, active: true })) {
-        activeStripePriceIds.add(price.id);
-      }
-
       const results: Array<{
         planId: string;
         name: string;
@@ -693,29 +583,18 @@ export async function planRoutes(app: FastifyInstance): Promise<void> {
         stripePriceId?: string;
       }> = [];
 
-      for (const plan of allPlans) {
-        // Check if the plan's Stripe price ACTUALLY still exists
-        const basePriceValid = plan.stripePriceId ? activeStripePriceIds.has(plan.stripePriceId) : false;
-        const perUserCents = Math.round(Number(plan.perUserPrice) * 100);
-        const needsPerUser = perUserCents > 0;
-        const perUserPriceValid = !needsPerUser || (plan.stripePerUserPriceId ? activeStripePriceIds.has(plan.stripePerUserPriceId) : false);
+      const body = z.object({ force: z.boolean().default(false) }).safeParse(request.body);
+      const force = body.success ? body.data.force : false;
 
-        // Only skip if BOTH prices are verified as existing in Stripe
-        if (basePriceValid && perUserPriceValid) {
+      for (const plan of allPlans) {
+        // Skip if already has a valid Stripe price (unless force)
+        if (plan.stripePriceId && !force) {
           results.push({
             planId: plan.id,
             name: plan.name,
             status: "skipped",
           });
           continue;
-        }
-
-        // Clear stale Stripe IDs before re-syncing
-        if (plan.stripePriceId && !basePriceValid) {
-          await db
-            .update(plans)
-            .set({ stripePriceId: null, stripePerUserPriceId: null, updatedAt: new Date() })
-            .where(eq(plans.id, plan.id));
         }
 
         try {
@@ -1010,6 +889,173 @@ export async function planRoutes(app: FastifyInstance): Promise<void> {
       });
     },
   );
+
+  // ── GET /plans/admin/orphans — Find DB plans whose moduleId doesn't exist in PRODUCT_CONFIG ──
+  app.get(
+    "/plans/admin/orphans",
+    { preHandler: [requirePlatformAdmin] },
+    async (_request, reply) => {
+      const validModuleIds = getValidModuleIds();
+      const allPlans = await db
+        .select()
+        .from(plans)
+        .orderBy(plans.productId, plans.moduleId, plans.tier);
+
+      const orphans = allPlans.filter((p) => !validModuleIds.has(p.moduleId ?? ""));
+      const valid = allPlans.filter((p) => validModuleIds.has(p.moduleId ?? ""));
+
+      return reply.send({
+        success: true,
+        data: {
+          orphans: orphans.map(formatPlan),
+          validCount: valid.length,
+          orphanCount: orphans.length,
+          validModuleIds: [...validModuleIds],
+        },
+      });
+    },
+  );
+
+  // ── DELETE /plans/admin/purge-orphans — Delete all plans whose moduleId doesn't exist in PRODUCT_CONFIG ──
+  app.delete(
+    "/plans/admin/purge-orphans",
+    { preHandler: [requirePlatformAdmin, requireDeleteAccess] },
+    async (request, reply) => {
+      const validModuleIds = getValidModuleIds();
+      const allPlans = await db.select().from(plans);
+
+      const orphanIds = allPlans
+        .filter((p) => !validModuleIds.has(p.moduleId ?? ""))
+        .map((p) => p.id);
+
+      if (orphanIds.length === 0) {
+        return reply.send({
+          success: true,
+          data: { deletedCount: 0, message: "No orphaned plans found" },
+        });
+      }
+
+      // Check which orphans are referenced by subscriptions
+      const referencedOrphans: string[] = [];
+      const deletableOrphans: string[] = [];
+
+      for (const orphanId of orphanIds) {
+        const [ref] = await db
+          .select({ id: subscriptionItems.id })
+          .from(subscriptionItems)
+          .where(eq(subscriptionItems.planId, orphanId))
+          .limit(1);
+
+        if (ref) {
+          referencedOrphans.push(orphanId);
+        } else {
+          deletableOrphans.push(orphanId);
+        }
+      }
+
+      // Hard delete the ones that aren't referenced
+      if (deletableOrphans.length > 0) {
+        await db.delete(plans).where(inArray(plans.id, deletableOrphans));
+      }
+
+      // Deactivate the ones that ARE referenced (can't hard delete)
+      if (referencedOrphans.length > 0) {
+        await db
+          .update(plans)
+          .set({ isActive: "false", updatedAt: new Date() })
+          .where(inArray(plans.id, referencedOrphans));
+      }
+
+      const admin = (
+        request as FastifyRequest & { platformAdmin: PlatformAdminAuth }
+      ).platformAdmin;
+
+      await db.insert(auditLog).values({
+        actorId: admin.userId,
+        actorType: "admin",
+        action: "plans.orphans_purged",
+        resourceType: "plan",
+        resourceId: "bulk",
+        metadata: {
+          hardDeleted: deletableOrphans.length,
+          deactivated: referencedOrphans.length,
+          totalOrphans: orphanIds.length,
+        },
+      });
+
+      return reply.send({
+        success: true,
+        data: {
+          hardDeleted: deletableOrphans.length,
+          deactivated: referencedOrphans.length,
+          totalOrphans: orphanIds.length,
+        },
+      });
+    },
+  );
+
+  // ── POST /plans/admin/archive-orphaned-stripe-prices — Archive Stripe prices not linked to any DB plan ──
+  app.post(
+    "/plans/admin/archive-orphaned-stripe-prices",
+    { preHandler: [requirePlatformAdmin, requireWriteAccess] },
+    async (request, reply) => {
+      if (!isStripeConfigured()) {
+        return reply.status(503).send({
+          success: false,
+          error: { code: "STRIPE_NOT_CONFIGURED", message: "Stripe is not configured" },
+        });
+      }
+
+      // Get all Stripe price IDs referenced by DB plans
+      const allPlans = await db.select().from(plans);
+      const referencedPriceIds = new Set(
+        allPlans
+          .flatMap((p) => [p.stripePriceId, p.stripePerUserPriceId])
+          .filter((id): id is string => id !== null && id !== undefined),
+      );
+
+      // Fetch all active Stripe prices
+      const orphanedPrices: string[] = [];
+      for await (const price of stripe.prices.list({ limit: 100, active: true })) {
+        if (!referencedPriceIds.has(price.id)) {
+          orphanedPrices.push(price.id);
+        }
+      }
+
+      // Archive them
+      let archivedCount = 0;
+      const errors: Array<{ priceId: string; error: string }> = [];
+      for (const priceId of orphanedPrices) {
+        try {
+          await stripe.prices.update(priceId, { active: false });
+          archivedCount++;
+        } catch (err) {
+          errors.push({
+            priceId,
+            error: err instanceof Error ? err.message : "Unknown error",
+          });
+        }
+      }
+
+      const admin = (
+        request as FastifyRequest & { platformAdmin: PlatformAdminAuth }
+      ).platformAdmin;
+
+      await db.insert(auditLog).values({
+        actorId: admin.userId,
+        actorType: "admin",
+        action: "stripe.orphaned_prices_archived",
+        resourceType: "stripe_price",
+        resourceId: "bulk",
+        metadata: { archivedCount, errorCount: errors.length },
+      });
+
+      return reply.send({
+        success: true,
+        data: { archivedCount, errors },
+      });
+    },
+  );
 }
 
 /** Check if Stripe is actually configured (not placeholder) */
@@ -1018,4 +1064,18 @@ function isStripeConfigured(): boolean {
     config.stripe.secretKey &&
     !config.stripe.secretKey.startsWith("sk_test_placeholder"),
   );
+}
+
+/** Get all valid module IDs from PRODUCT_CONFIG */
+function getValidModuleIds(): Set<string> {
+  const ids = new Set<string>();
+  for (const product of Object.values(PRODUCT_CONFIG)) {
+    for (const mod of product.baseModules) {
+      ids.add(mod.id);
+    }
+    for (const addon of product.addons) {
+      ids.add(addon.id);
+    }
+  }
+  return ids;
 }

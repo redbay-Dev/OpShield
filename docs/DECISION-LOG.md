@@ -496,4 +496,11 @@ Every architectural, product, and workflow decision is recorded here with ration
 **Rationale:** Reconciliation needs human review before action — automatically syncing could create duplicate Stripe prices or overwrite manual Stripe changes. On-demand gives the admin control and visibility. The UI shows exactly what's wrong (missing prices, mismatches, orphans) so the admin can decide what to fix.
 **Alternatives considered:** Background job that auto-syncs on a schedule — rejected because blind sync could create pricing chaos; Stripe CLI script — rejected because it's outside the dashboard (violates "everything through UI" rule).
 
+### DEC-069: One Stripe product per plan (module+tier), not per module
+**Date:** 2026-03-22
+**Context:** `syncPlanToStripe` created one Stripe product per module (e.g. "safespec - safespec-whs") with multiple tiers sharing it. `findOrCreateStripePrice` matched by amount+interval within a product, so two tiers at the same dollar amount got the same Stripe price ID. This caused 30 DB plans to map to fewer unique Stripe prices, making the sync counts never match.
+**Decision:** Changed to one Stripe product per plan, keyed by `productId|moduleId|tier` in metadata. Each plan's prices are isolated in their own Stripe product. `findOrCreatePrice` still reuses prices within a product (same amount+interval = same price), but since each product only has one plan's prices, there are no collisions.
+**Rationale:** 15 products × 2 intervals = 30 unique prices. 1:1 mapping between DB plans and Stripe prices. No shared prices, no confusing count mismatches. If a price changes, only that plan's Stripe product is affected.
+**Alternatives considered:** Keep shared products and add tier to the price lookup key — fragile, would still break if two tiers had identical amounts; create new prices every sync — leaves orphaned prices in Stripe that accounts team has to clean up.
+
 ---

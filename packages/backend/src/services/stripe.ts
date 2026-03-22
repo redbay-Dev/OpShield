@@ -158,47 +158,44 @@ export async function syncPlanToStripe(plan: {
   const moduleId = plan.moduleId ?? "core";
   const interval = plan.billingInterval === "annual" ? "year" : "month";
 
-  // Find or create a Stripe Product for this module
+  // One Stripe product per plan (module + tier), not per module
+  const productKey = `${plan.productId}|${moduleId}|${plan.tier}`;
   const existing = await stripe.products.search({
-    query: `metadata["moduleId"]:"${moduleId}" AND metadata["productId"]:"${plan.productId}"`,
+    query: `metadata["planKey"]:"${productKey}"`,
   });
 
   let stripeProductId: string;
   if (existing.data.length > 0 && existing.data[0]) {
     stripeProductId = existing.data[0].id;
+    // Update product name if it changed
+    await stripe.products.update(stripeProductId, {
+      name: `${plan.name} (${moduleId})`,
+    });
   } else {
     const product = await stripe.products.create({
-      name: `${plan.productId} - ${moduleId}`,
-      metadata: { moduleId, productId: plan.productId },
+      name: `${plan.name} (${moduleId})`,
+      metadata: { planKey: productKey, moduleId, productId: plan.productId, tier: plan.tier },
     });
     stripeProductId = product.id;
   }
 
-  // Find or create base price
+  // Find existing price or create new one
   const baseCents = Math.round(Number(plan.basePrice) * 100);
-  const stripePriceId = await findOrCreateStripePrice(
+  const stripePriceId = await findOrCreatePrice(
     stripeProductId,
     baseCents,
     interval as "month" | "year",
-    `${plan.name} - ${plan.tier} Base (${plan.billingInterval})`,
+    `${plan.name} ${plan.tier} (${plan.billingInterval})`,
   );
 
-  // Find or create per-user price (if applicable)
-  const perUserCents = Math.round(Number(plan.perUserPrice) * 100);
-  let stripePerUserPriceId: string | null = null;
-  if (perUserCents > 0) {
-    stripePerUserPriceId = await findOrCreateStripePrice(
-      stripeProductId,
-      perUserCents,
-      interval as "month" | "year",
-      `${plan.name} - ${plan.tier} Per User (${plan.billingInterval})`,
-    );
-  }
-
-  return { stripePriceId, stripePerUserPriceId };
+  return { stripePriceId, stripePerUserPriceId: null };
 }
 
-async function findOrCreateStripePrice(
+/**
+ * Find an existing active price matching amount+interval, or create a new one.
+ * Since each plan has its own Stripe product, there's no collision risk.
+ */
+async function findOrCreatePrice(
   productId: string,
   amountCents: number,
   interval: "month" | "year",
@@ -208,7 +205,7 @@ async function findOrCreateStripePrice(
     product: productId,
     type: "recurring",
     active: true,
-    limit: 100,
+    limit: 10,
   });
 
   const match = existing.data.find(

@@ -7,12 +7,9 @@ import {
   ShieldCheck,
   Truck,
   RefreshCw,
-  AlertTriangle,
   XCircle,
   CheckCircle2,
-  Calendar,
   Trash2,
-  Eraser,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@frontend/components/ui/button.js";
@@ -73,39 +70,16 @@ interface AddonPriceRow {
 
 interface ReconciliationData {
   summary: {
-    totalDbPlans: number;
+    totalPlans: number;
     activePlans: number;
-    syncedToStripe: number;
-    missingStripePrice: number;
-    missingPerUserPrice: number;
-    priceMismatches: number;
-    missingAnnualVariant: number;
-    orphanedStripePrices: number;
-    inactivePlans: number;
-    totalStripePrices: number;
-    totalStripeProducts: number;
+    synced: number;
+    broken: number;
+    unsynced: number;
+    inactive: number;
   };
   synced: Array<Plan & Record<string, unknown>>;
-  missingStripePrice: Array<Plan & { issue?: string }>;
-  missingPerUserPrice: Array<Plan & Record<string, unknown>>;
-  priceMismatches: Array<
-    Plan & {
-      stripeAmount: number;
-      expectedAmount: number;
-      stripeInterval: string;
-      expectedInterval: string;
-    }
-  >;
-  missingAnnualVariant: Array<Plan & Record<string, unknown>>;
-  orphanedStripePrices: Array<{
-    priceId: string;
-    productId: string;
-    unitAmount: number | null;
-    currency: string;
-    interval: string | null;
-    nickname: string | null;
-    productName: string;
-  }>;
+  broken: Array<Plan & { issue?: string }>;
+  unsynced: Array<Plan & Record<string, unknown>>;
   inactive: Array<Plan & Record<string, unknown>>;
 }
 
@@ -122,20 +96,6 @@ interface SyncAllResult {
     status: "synced" | "failed" | "skipped";
     error?: string;
   }>;
-}
-
-interface AnnualVariantResult {
-  summary: {
-    created: number;
-    skipped: number;
-  };
-  created: Array<Record<string, unknown>>;
-  skipped: Array<{ name: string; reason: string }>;
-}
-
-interface ClearStaleResult {
-  clearedCount: number;
-  totalPlans: number;
 }
 
 interface BulkDeleteResult {
@@ -602,17 +562,17 @@ function StripeSyncPanel({ canUpdate }: { canUpdate: boolean }): React.JSX.Eleme
   });
 
   const syncAllMutation = useMutation({
-    mutationFn: async (): Promise<SyncAllResult> => {
-      return apiPost<SyncAllResult>("/plans/admin/sync-all", {});
+    mutationFn: async (force: boolean = false): Promise<SyncAllResult> => {
+      return apiPost<SyncAllResult>("/plans/admin/sync-all", { force });
     },
     onSuccess: async (data) => {
       const { synced, failed, skipped } = data.summary;
       if (failed > 0) {
         toast.error(`Synced ${synced}, failed ${failed}, skipped ${skipped}`);
       } else if (synced > 0) {
-        toast.success(`Synced ${synced} plans to Stripe (${skipped} already up-to-date)`);
+        toast.success(`Synced ${synced} plans to Stripe`);
       } else {
-        toast.info("All plans already synced and verified in Stripe");
+        toast.info("All plans already synced");
       }
       await invalidateAll();
     },
@@ -630,37 +590,6 @@ function StripeSyncPanel({ canUpdate }: { canUpdate: boolean }): React.JSX.Eleme
     onError: (err: Error) => toast.error(err.message),
   });
 
-  const clearStaleMutation = useMutation({
-    mutationFn: async (): Promise<ClearStaleResult> => {
-      return apiPost<ClearStaleResult>("/plans/admin/clear-stale-stripe-ids", {});
-    },
-    onSuccess: async (data) => {
-      if (data.clearedCount > 0) {
-        toast.success(`Cleared ${data.clearedCount} stale Stripe references`);
-      } else {
-        toast.info("No stale Stripe references found");
-      }
-      await invalidateAll();
-    },
-    onError: (err: Error) => toast.error(err.message),
-  });
-
-  const createAnnualMutation = useMutation({
-    mutationFn: async (): Promise<AnnualVariantResult> => {
-      return apiPost<AnnualVariantResult>("/plans/admin/create-annual-variants", {});
-    },
-    onSuccess: async (data) => {
-      const { created, skipped } = data.summary;
-      if (created > 0) {
-        toast.success(`Created ${created} annual plans`);
-      } else {
-        toast.info(`All ${skipped} annual plans already exist`);
-      }
-      await invalidateAll();
-    },
-    onError: (err: Error) => toast.error(err.message),
-  });
-
   const deletePlansMutation = useMutation({
     mutationFn: async ({ planIds, permanent }: { planIds: string[]; permanent: boolean }): Promise<BulkDeleteResult> => {
       return apiDelete<BulkDeleteResult>("/plans/admin/bulk", { planIds, permanent });
@@ -670,7 +599,7 @@ function StripeSyncPanel({ canUpdate }: { canUpdate: boolean }): React.JSX.Eleme
         toast.success(`Deleted ${data.deletedCount} plans`);
       }
       if (data.errors.length > 0) {
-        toast.error(`${data.errors.length} plans could not be deleted: ${data.errors.map((e) => e.reason).join(", ")}`);
+        toast.error(data.errors.map((e) => e.reason).join(", "));
       }
       await invalidateAll();
     },
@@ -686,7 +615,7 @@ function StripeSyncPanel({ canUpdate }: { canUpdate: boolean }): React.JSX.Eleme
   }
 
   if (isError) {
-    const errMsg = error instanceof Error ? error.message : "Failed to load reconciliation data";
+    const errMsg = error instanceof Error ? error.message : "Failed to load";
     return (
       <Card>
         <CardContent className="py-8">
@@ -706,439 +635,155 @@ function StripeSyncPanel({ canUpdate }: { canUpdate: boolean }): React.JSX.Eleme
   if (!reconciliation) return <></>;
 
   const { summary } = reconciliation;
-  const hasIssues =
-    summary.missingStripePrice > 0 ||
-    summary.missingPerUserPrice > 0 ||
-    summary.priceMismatches > 0 ||
-    summary.missingAnnualVariant > 0;
-
+  const hasProblems = summary.broken > 0 || summary.unsynced > 0;
   const anyMutating =
     syncAllMutation.isPending ||
     syncSingleMutation.isPending ||
-    clearStaleMutation.isPending ||
-    createAnnualMutation.isPending ||
     deletePlansMutation.isPending;
+
+  // Combine all plans into one flat list for the table
+  const allPlans = [
+    ...reconciliation.synced.map((p) => ({ ...p, status: "synced" as const })),
+    ...reconciliation.broken.map((p) => ({ ...p, status: "broken" as const })),
+    ...reconciliation.unsynced.map((p) => ({ ...p, status: "unsynced" as const })),
+    ...reconciliation.inactive.map((p) => ({ ...p, status: "inactive" as const })),
+  ];
 
   return (
     <div className="space-y-6">
-      {/* Summary cards */}
+      {/* Summary */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard
-          label="DB Plans"
-          value={summary.totalDbPlans}
-          sub={`${summary.activePlans} active, ${summary.inactivePlans} inactive`}
-        />
+        <StatCard label="Total Plans" value={summary.totalPlans} sub={`${summary.activePlans} active`} />
         <StatCard
           label="Synced"
-          value={summary.syncedToStripe}
+          value={summary.synced}
           sub={`of ${summary.activePlans} active`}
-          variant={summary.syncedToStripe === summary.activePlans ? "success" : "warning"}
+          variant={summary.synced === summary.activePlans ? "success" : "warning"}
         />
         <StatCard
-          label="Stripe Prices"
-          value={summary.totalStripePrices}
-          sub={`${summary.orphanedStripePrices} orphaned`}
-          variant={summary.orphanedStripePrices > 0 ? "warning" : "default"}
+          label="Broken"
+          value={summary.broken}
+          sub="Stripe price missing"
+          variant={summary.broken > 0 ? "destructive" : "success"}
         />
         <StatCard
-          label="Issues"
-          value={
-            summary.missingStripePrice +
-            summary.missingPerUserPrice +
-            summary.priceMismatches +
-            summary.missingAnnualVariant
-          }
-          sub="need attention"
-          variant={hasIssues ? "destructive" : "success"}
+          label="Unsynced"
+          value={summary.unsynced}
+          sub="never pushed to Stripe"
+          variant={summary.unsynced > 0 ? "destructive" : "success"}
         />
       </div>
 
-      {/* Action buttons */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm">Actions</CardTitle>
-          <CardDescription className="text-xs">
-            Manage the connection between OpShield plans and Stripe prices. Sync pushes plans TO Stripe. Clear removes dead Stripe references FROM the database.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-3">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={anyMutating}
-              onClick={() => void refetch()}
-            >
-              <RefreshCw className="mr-2 size-3.5" />
-              Refresh
+      {/* Actions */}
+      <div className="flex flex-wrap gap-3">
+        <Button variant="outline" size="sm" disabled={anyMutating} onClick={() => void refetch()}>
+          <RefreshCw className="mr-2 size-3.5" />
+          Refresh
+        </Button>
+        {canUpdate && (
+          <>
+            <Button size="sm" disabled={anyMutating} onClick={() => void syncAllMutation.mutateAsync(false)}>
+              {syncAllMutation.isPending ? (
+                <Loader2 className="mr-2 size-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-2 size-3.5" />
+              )}
+              Sync Missing
             </Button>
+            <Button variant="secondary" size="sm" disabled={anyMutating} onClick={() => void syncAllMutation.mutateAsync(true)}>
+              {syncAllMutation.isPending ? (
+                <Loader2 className="mr-2 size-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-2 size-3.5" />
+              )}
+              Force Re-sync All
+            </Button>
+          </>
+        )}
+      </div>
 
-            {canUpdate && (
-              <>
-                <Button
-                  size="sm"
-                  disabled={anyMutating}
-                  onClick={() => void syncAllMutation.mutateAsync()}
-                >
-                  {syncAllMutation.isPending ? (
-                    <Loader2 className="mr-2 size-3.5 animate-spin" />
-                  ) : (
-                    <RefreshCw className="mr-2 size-3.5" />
-                  )}
-                  Sync All to Stripe
-                </Button>
-
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={anyMutating}
-                  onClick={() => void clearStaleMutation.mutateAsync()}
-                >
-                  {clearStaleMutation.isPending ? (
-                    <Loader2 className="mr-2 size-3.5 animate-spin" />
-                  ) : (
-                    <Eraser className="mr-2 size-3.5" />
-                  )}
-                  Clear Stale Stripe IDs
-                </Button>
-
-                {summary.missingAnnualVariant > 0 && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={anyMutating}
-                    onClick={() => void createAnnualMutation.mutateAsync()}
-                  >
-                    {createAnnualMutation.isPending ? (
-                      <Loader2 className="mr-2 size-3.5 animate-spin" />
-                    ) : (
-                      <Calendar className="mr-2 size-3.5" />
-                    )}
-                    Create Annual Variants ({summary.missingAnnualVariant})
-                  </Button>
-                )}
-              </>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* No issues */}
-      {!hasIssues && summary.orphanedStripePrices === 0 && (
+      {/* All clear */}
+      {!hasProblems && summary.inactive === 0 && (
         <Card>
           <CardContent className="py-8">
             <div className="flex flex-col items-center gap-2 text-center">
               <CheckCircle2 className="size-8 text-green-600" />
-              <p className="text-sm font-medium">All plans are synced</p>
-              <p className="text-xs text-muted-foreground">
-                {summary.syncedToStripe} active plans verified against Stripe.
-              </p>
+              <p className="text-sm font-medium">All {summary.synced} plans synced to Stripe</p>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Missing Stripe prices */}
-      {reconciliation.missingStripePrice.length > 0 && (
-        <IssueSection
-          title="Missing Stripe Price"
-          description="These plans have no valid Stripe price — they cannot be used in checkout. This includes plans whose Stripe price was deleted."
-          icon={<XCircle className="size-4 text-destructive" />}
-          count={reconciliation.missingStripePrice.length}
-        >
-          <div className="rounded-md border">
-            <div className="grid grid-cols-[1fr_100px_100px_80px_120px] gap-2 border-b bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground">
-              <span>Plan</span>
-              <span>Product</span>
-              <span>Interval</span>
-              <span>Price</span>
-              <span>Actions</span>
-            </div>
-            {reconciliation.missingStripePrice.map((plan) => (
-              <div
-                key={plan.id}
-                className="grid grid-cols-[1fr_100px_100px_80px_120px] items-center gap-2 border-b px-3 py-2 last:border-b-0"
-              >
-                <div>
-                  <p className="text-sm font-medium">{plan.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {plan.moduleId} / {plan.tier}
-                    {plan.issue && (
-                      <span className="ml-1 text-destructive">(stale ref)</span>
-                    )}
-                  </p>
-                </div>
-                <Badge variant="outline" className="w-fit">{plan.productId}</Badge>
-                <Badge variant="secondary" className="w-fit">{plan.billingInterval}</Badge>
-                <span className="text-sm">${parseFloat(plan.basePrice).toFixed(0)}</span>
-                {canUpdate ? (
-                  <div className="flex gap-1">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7"
-                      disabled={anyMutating}
-                      onClick={() => void syncSingleMutation.mutateAsync(plan.id)}
-                    >
-                      Sync
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 text-destructive hover:text-destructive"
-                      disabled={anyMutating}
-                      onClick={() => void deletePlansMutation.mutateAsync({ planIds: [plan.id], permanent: true })}
-                    >
-                      <Trash2 className="size-3.5" />
-                    </Button>
+      {/* Every single plan in one table */}
+      {(hasProblems || summary.inactive > 0) && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm">All Plans ({allPlans.length})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-md border">
+              <div className="grid grid-cols-[1fr_100px_90px_80px_80px_100px] gap-2 border-b bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground">
+                <span>Plan</span>
+                <span>Product</span>
+                <span>Interval</span>
+                <span>Price</span>
+                <span>Status</span>
+                <span>Actions</span>
+              </div>
+              {allPlans.map((plan) => (
+                <div
+                  key={plan.id}
+                  className={cn(
+                    "grid grid-cols-[1fr_100px_90px_80px_80px_100px] items-center gap-2 border-b px-3 py-2 last:border-b-0",
+                    plan.status === "inactive" && "opacity-50",
+                  )}
+                >
+                  <div>
+                    <p className="text-sm font-medium">{plan.name}</p>
+                    <p className="text-xs text-muted-foreground">{plan.moduleId} / {plan.tier}</p>
                   </div>
-                ) : (
-                  <span className="text-xs text-muted-foreground">Read-only</span>
-                )}
-              </div>
-            ))}
-          </div>
-        </IssueSection>
-      )}
-
-      {/* Missing per-user prices */}
-      {reconciliation.missingPerUserPrice.length > 0 && (
-        <IssueSection
-          title="Missing Per-User Price"
-          description="These plans have per-user pricing but no Stripe per-user price ID."
-          icon={<AlertTriangle className="size-4 text-amber-500" />}
-          count={reconciliation.missingPerUserPrice.length}
-        >
-          <div className="rounded-md border">
-            <div className="grid grid-cols-[1fr_100px_100px_80px_80px] gap-2 border-b bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground">
-              <span>Plan</span>
-              <span>Product</span>
-              <span>Per User</span>
-              <span>Interval</span>
-              <span>Action</span>
-            </div>
-            {reconciliation.missingPerUserPrice.map((plan) => (
-              <div
-                key={plan.id}
-                className="grid grid-cols-[1fr_100px_100px_80px_80px] items-center gap-2 border-b px-3 py-2 last:border-b-0"
-              >
-                <div>
-                  <p className="text-sm font-medium">{plan.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {plan.moduleId} / {plan.tier}
-                  </p>
-                </div>
-                <Badge variant="outline" className="w-fit">{plan.productId}</Badge>
-                <span className="text-sm">${parseFloat(plan.perUserPrice).toFixed(0)}/user</span>
-                <Badge variant="secondary" className="w-fit">{plan.billingInterval}</Badge>
-                {canUpdate ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7"
-                    disabled={anyMutating}
-                    onClick={() => void syncSingleMutation.mutateAsync(plan.id)}
+                  <Badge variant="outline" className="w-fit">{plan.productId}</Badge>
+                  <span className="text-xs">{plan.billingInterval}</span>
+                  <span className="text-sm">${parseFloat(plan.basePrice).toFixed(0)}</span>
+                  <Badge
+                    variant={
+                      plan.status === "synced" ? "default" :
+                      plan.status === "inactive" ? "secondary" :
+                      "destructive"
+                    }
+                    className="w-fit text-xs"
                   >
-                    Sync
-                  </Button>
-                ) : (
-                  <span className="text-xs text-muted-foreground">Read-only</span>
-                )}
-              </div>
-            ))}
-          </div>
-        </IssueSection>
-      )}
-
-      {/* Price mismatches */}
-      {reconciliation.priceMismatches.length > 0 && (
-        <IssueSection
-          title="Price Mismatches"
-          description="These plans have Stripe prices that don't match the database. Re-syncing will create new Stripe prices."
-          icon={<AlertTriangle className="size-4 text-amber-500" />}
-          count={reconciliation.priceMismatches.length}
-        >
-          <div className="rounded-md border">
-            <div className="grid grid-cols-[1fr_120px_120px_80px] gap-2 border-b bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground">
-              <span>Plan</span>
-              <span>DB Amount (cents)</span>
-              <span>Stripe Amount (cents)</span>
-              <span>Action</span>
-            </div>
-            {reconciliation.priceMismatches.map((plan) => (
-              <div
-                key={plan.id}
-                className="grid grid-cols-[1fr_120px_120px_80px] items-center gap-2 border-b px-3 py-2 last:border-b-0"
-              >
-                <div>
-                  <p className="text-sm font-medium">{plan.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {plan.moduleId} / {plan.tier} ({plan.billingInterval})
-                  </p>
+                    {plan.status}
+                  </Badge>
+                  <div className="flex gap-1">
+                    {canUpdate && plan.status !== "synced" && plan.status !== "inactive" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7"
+                        disabled={anyMutating}
+                        onClick={() => void syncSingleMutation.mutateAsync(plan.id)}
+                      >
+                        Sync
+                      </Button>
+                    )}
+                    {canUpdate && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-destructive hover:text-destructive"
+                        disabled={anyMutating}
+                        onClick={() => void deletePlansMutation.mutateAsync({ planIds: [plan.id], permanent: true })}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
-                <span className="text-sm font-mono">{plan.expectedAmount}</span>
-                <span className="text-sm font-mono text-destructive">{plan.stripeAmount}</span>
-                {canUpdate ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7"
-                    disabled={anyMutating}
-                    onClick={() => void syncSingleMutation.mutateAsync(plan.id)}
-                  >
-                    Re-sync
-                  </Button>
-                ) : (
-                  <span className="text-xs text-muted-foreground">Read-only</span>
-                )}
-              </div>
-            ))}
-          </div>
-        </IssueSection>
-      )}
-
-      {/* Missing annual variants */}
-      {reconciliation.missingAnnualVariant.length > 0 && (
-        <IssueSection
-          title="Missing Annual Variants"
-          description="These monthly plans don't have a corresponding annual plan. Annual billing won't be available for them."
-          icon={<Calendar className="size-4 text-amber-500" />}
-          count={reconciliation.missingAnnualVariant.length}
-        >
-          <div className="rounded-md border">
-            <div className="grid grid-cols-[1fr_100px_100px] gap-2 border-b bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground">
-              <span>Plan</span>
-              <span>Product</span>
-              <span>Monthly Price</span>
+              ))}
             </div>
-            {reconciliation.missingAnnualVariant.map((plan) => (
-              <div
-                key={plan.id}
-                className="grid grid-cols-[1fr_100px_100px] items-center gap-2 border-b px-3 py-2 last:border-b-0"
-              >
-                <div>
-                  <p className="text-sm font-medium">{plan.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {plan.moduleId} / {plan.tier}
-                  </p>
-                </div>
-                <Badge variant="outline" className="w-fit">{plan.productId}</Badge>
-                <span className="text-sm">${parseFloat(plan.basePrice).toFixed(0)}/mo</span>
-              </div>
-            ))}
-          </div>
-        </IssueSection>
-      )}
-
-      {/* Orphaned Stripe prices */}
-      {reconciliation.orphanedStripePrices.length > 0 && (
-        <IssueSection
-          title="Orphaned Stripe Prices"
-          description="These active Stripe prices are not referenced by any plan in the database. Archive them in the Stripe dashboard if not needed."
-          icon={<AlertTriangle className="size-4 text-amber-500" />}
-          count={reconciliation.orphanedStripePrices.length}
-        >
-          <div className="rounded-md border">
-            <div className="grid grid-cols-[1fr_140px_100px_100px] gap-2 border-b bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground">
-              <span>Stripe Product</span>
-              <span>Price ID</span>
-              <span>Amount</span>
-              <span>Interval</span>
-            </div>
-            {reconciliation.orphanedStripePrices.map((price) => (
-              <div
-                key={price.priceId}
-                className="grid grid-cols-[1fr_140px_100px_100px] items-center gap-2 border-b px-3 py-2 last:border-b-0"
-              >
-                <div>
-                  <p className="text-sm font-medium">{price.productName}</p>
-                  <p className="text-xs text-muted-foreground font-mono truncate">
-                    {price.nickname ?? price.priceId}
-                  </p>
-                </div>
-                <span className="text-xs text-muted-foreground font-mono truncate">
-                  {price.priceId}
-                </span>
-                <span className="text-sm">
-                  {price.unitAmount !== null
-                    ? `$${(price.unitAmount / 100).toFixed(2)} ${price.currency.toUpperCase()}`
-                    : "—"}
-                </span>
-                <Badge variant="secondary" className="w-fit">
-                  {price.interval ?? "one-time"}
-                </Badge>
-              </div>
-            ))}
-          </div>
-        </IssueSection>
-      )}
-
-      {/* Inactive plans */}
-      {reconciliation.inactive.length > 0 && (
-        <IssueSection
-          title="Inactive Plans"
-          description="These plans are deactivated and won't appear in the pricing page or checkout."
-          icon={<XCircle className="size-4 text-muted-foreground" />}
-          count={reconciliation.inactive.length}
-          defaultCollapsed
-        >
-          {canUpdate && (
-            <div className="mb-3">
-              <Button
-                variant="destructive"
-                size="sm"
-                disabled={anyMutating}
-                onClick={() => {
-                  const ids = reconciliation.inactive.map((p) => p.id);
-                  void deletePlansMutation.mutateAsync({ planIds: ids, permanent: true });
-                }}
-              >
-                {deletePlansMutation.isPending ? (
-                  <Loader2 className="mr-2 size-3.5 animate-spin" />
-                ) : (
-                  <Trash2 className="mr-2 size-3.5" />
-                )}
-                Delete All Inactive ({reconciliation.inactive.length})
-              </Button>
-            </div>
-          )}
-          <div className="rounded-md border">
-            <div className="grid grid-cols-[1fr_100px_100px_80px_60px] gap-2 border-b bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground">
-              <span>Plan</span>
-              <span>Product</span>
-              <span>Interval</span>
-              <span>Price</span>
-              <span />
-            </div>
-            {reconciliation.inactive.map((plan) => (
-              <div
-                key={plan.id}
-                className="grid grid-cols-[1fr_100px_100px_80px_60px] items-center gap-2 border-b px-3 py-2 last:border-b-0 opacity-60"
-              >
-                <div>
-                  <p className="text-sm font-medium">{plan.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {plan.moduleId} / {plan.tier}
-                  </p>
-                </div>
-                <Badge variant="outline" className="w-fit">{plan.productId}</Badge>
-                <Badge variant="secondary" className="w-fit">{plan.billingInterval}</Badge>
-                <span className="text-sm">${parseFloat(plan.basePrice).toFixed(0)}</span>
-                {canUpdate && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 text-destructive hover:text-destructive"
-                    disabled={anyMutating}
-                    onClick={() => void deletePlansMutation.mutateAsync({ planIds: [plan.id], permanent: true })}
-                  >
-                    <Trash2 className="size-3.5" />
-                  </Button>
-                )}
-              </div>
-            ))}
-          </div>
-        </IssueSection>
+          </CardContent>
+        </Card>
       )}
     </div>
   );
@@ -1171,53 +816,6 @@ function StatCard({
         <p className={cn("text-2xl font-bold", colorMap[variant])}>{value}</p>
         <p className="text-xs text-muted-foreground">{sub}</p>
       </CardContent>
-    </Card>
-  );
-}
-
-// ── Issue Section ──
-
-function IssueSection({
-  title,
-  description,
-  icon,
-  count,
-  defaultCollapsed = false,
-  children,
-}: {
-  title: string;
-  description: string;
-  icon: React.ReactNode;
-  count: number;
-  defaultCollapsed?: boolean;
-  children: React.ReactNode;
-}): React.JSX.Element {
-  const [collapsed, setCollapsed] = useState(defaultCollapsed);
-
-  return (
-    <Card>
-      <CardHeader className="pb-3">
-        <button
-          type="button"
-          className="flex items-center gap-3 text-left w-full"
-          onClick={() => setCollapsed((prev) => !prev)}
-        >
-          {icon}
-          <div className="flex-1">
-            <CardTitle className="text-sm">
-              {title}
-              <Badge variant="secondary" className="ml-2 text-xs">
-                {count}
-              </Badge>
-            </CardTitle>
-            <CardDescription className="text-xs">{description}</CardDescription>
-          </div>
-          <span className="text-xs text-muted-foreground">
-            {collapsed ? "Show" : "Hide"}
-          </span>
-        </button>
-      </CardHeader>
-      {!collapsed && <CardContent className="pt-0">{children}</CardContent>}
     </Card>
   );
 }
