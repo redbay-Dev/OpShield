@@ -1,7 +1,7 @@
 import { config as loadEnv } from "dotenv";
 import { resolve } from "node:path";
 
-loadEnv({ path: resolve(import.meta.dirname, "../../..", ".env.development") });
+loadEnv({ path: resolve(import.meta.dirname, "../../..", ".env.development"), override: true });
 
 export const config = {
   nodeEnv: process.env.NODE_ENV ?? "development",

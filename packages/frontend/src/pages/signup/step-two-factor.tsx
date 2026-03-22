@@ -1,7 +1,7 @@
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { useNavigate } from "react-router";
 import { QRCodeSVG } from "qrcode.react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { Loader2, Copy, Check } from "lucide-react";
 import { Button } from "@frontend/components/ui/button.js";
 import {
@@ -14,12 +14,13 @@ import {
 import { Field, FieldGroup, FieldLabel } from "@frontend/components/ui/field.js";
 import { Input } from "@frontend/components/ui/input.js";
 import { authClient } from "@frontend/lib/auth-client.js";
+import { apiGet } from "@frontend/api/client.js";
 import { useSignupContext } from "./signup-context.js";
 
-type SetupStep = "password" | "scan" | "verify" | "backup";
+type SetupStep = "checking" | "password" | "scan" | "verify" | "backup";
 
 export function StepTwoFactorPage(): React.JSX.Element {
-  const [step, setStep] = useState<SetupStep>("password");
+  const [step, setStep] = useState<SetupStep>("checking");
   const [password, setPassword] = useState("");
   const [totpUri, setTotpUri] = useState("");
   const [code, setCode] = useState("");
@@ -30,6 +31,23 @@ export function StepTwoFactorPage(): React.JSX.Element {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { setTwoFactorComplete } = useSignupContext();
+
+  // Check if 2FA is already enabled — skip if so
+  const { data: tfStatus } = useQuery({
+    queryKey: ["signup-2fa-status"],
+    queryFn: async (): Promise<{ twoFactorEnabled: boolean }> => {
+      return apiGet<{ twoFactorEnabled: boolean }>("/me/2fa-status");
+    },
+  });
+
+  useEffect(() => {
+    if (tfStatus?.twoFactorEnabled) {
+      setTwoFactorComplete(true);
+      void navigate("/signup/company", { replace: true });
+    } else if (tfStatus && !tfStatus.twoFactorEnabled) {
+      setStep("password");
+    }
+  }, [tfStatus, setTwoFactorComplete, navigate]);
 
   async function handleEnable(e: FormEvent): Promise<void> {
     e.preventDefault();
@@ -83,6 +101,14 @@ export function StepTwoFactorPage(): React.JSX.Element {
   const secret = totpUri
     ? new URL(totpUri).searchParams.get("secret") ?? ""
     : "";
+
+  if (step === "checking") {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="size-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   if (step === "password") {
     return (

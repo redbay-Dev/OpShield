@@ -105,7 +105,6 @@ export async function provisionTenant(
       ownerName: ownerInfo?.ownerName,
     });
 
-    // If webhook delivery itself failed, mark as failed immediately
     if (webhookResult.error) {
       await db
         .update(tenantProvisioning)
@@ -123,7 +122,22 @@ export async function provisionTenant(
 
       results.push({ productId, status: "failed", error: webhookResult.error });
     } else {
-      results.push({ productId, status: "dispatched", error: null });
+      // Product responded 200 — provisioning succeeded
+      await db
+        .update(tenantProvisioning)
+        .set({
+          status: "success",
+          provisionedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(tenantProvisioning.tenantId, tenantId),
+            eq(tenantProvisioning.productId, productId),
+          ),
+        );
+
+      results.push({ productId, status: "success", error: null });
     }
   }
 
@@ -210,7 +224,17 @@ export async function retryProvisioning(
     return { productId, status: "failed", error: webhookResult.error };
   }
 
-  return { productId, status: "dispatched", error: null };
+  // Product responded 200 — provisioning succeeded
+  await db
+    .update(tenantProvisioning)
+    .set({
+      status: "success",
+      provisionedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(tenantProvisioning.id, provRow.id));
+
+  return { productId, status: "success", error: null };
 }
 
 /**

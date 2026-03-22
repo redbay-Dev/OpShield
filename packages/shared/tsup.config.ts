@@ -6,6 +6,7 @@ export default defineConfig({
     "src/schemas/index.ts",
     "src/types/index.ts",
     "src/constants/index.ts",
+    "src/utils/index.ts",
   ],
   format: ["esm"],
   dts: true,

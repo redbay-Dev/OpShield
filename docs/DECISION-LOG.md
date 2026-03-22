@@ -459,3 +459,34 @@ Every architectural, product, and workflow decision is recorded here with ration
 **Alternatives considered:** New `domains` text array column (requires migration, but provides better querying — acceptable trade-off for now since discovery queries all enforced providers anyway).
 
 ---
+
+### DEC-064: Plans system redesign — no database changes
+**Date:** 2026-03-22
+**Context:** The plans system UX was flat and confusing — every module x tier x interval was presented as an independent plan. Needed a product-first selection flow.
+**Decision:** Redesign is entirely frontend/shared-constants. The current plan-per-module DB schema stays unchanged because each plan row maps to one Stripe price, which is exactly what Stripe needs.
+**Rationale:** The data model correctly represents billing structure. The problem was presentation, not data.
+**Alternatives considered:** Adding a `plan_type` column (base vs addon) — unnecessary since module categorisation is structural and belongs in constants, not per-row data.
+
+### DEC-065: Product configuration in shared constants, not database
+**Date:** 2026-03-22
+**Context:** The frontend needed to know which modules are base (tiered) vs add-on (flat), what tiers each module has, and what dependencies exist between modules.
+**Decision:** Added `PRODUCT_CONFIG` to `packages/shared/src/constants/index.ts` as the single source of truth for product structure, module categorisation, tier definitions, and dependency rules.
+**Rationale:** This information is structural — it doesn't change per-tenant or at runtime. Storing it in constants means it's available everywhere (frontend, backend, tests) with full TypeScript type safety and no API calls.
+**Alternatives considered:** Storing in database (requires API call, adds latency, unnecessary for static structure).
+
+### DEC-066: Bundle discount logic in shared package
+**Date:** 2026-03-22
+**Context:** The frontend needs live price calculation (pricing page and plan builder), and the backend needs the same logic for Stripe coupon selection.
+**Decision:** Moved bundle discount determination to `getBundleDiscountPercent()` in shared constants. Created `calculatePriceBreakdown()` in shared utils. Backend `billing-utils.ts` now imports from shared.
+**Rationale:** Single source of truth prevents frontend/backend price discrepancies. Both sides use identical rules.
+
+---
+
+### DEC-067: Defer tenant creation to Stripe webhook
+**Date:** 2026-03-22
+**Context:** The checkout endpoint created tenants before payment, causing orphaned records and blocking retries on payment failure.
+**Decision:** Moved tenant/module/user creation from `POST /signup/checkout` into the `checkout.session.completed` webhook handler. Checkout endpoint passes all tenant data via Stripe session metadata.
+**Rationale:** Tenant records should only exist after confirmed payment. Stripe metadata has a 500-char limit per value, but JSON-encoded module selections fit comfortably. The webhook handler includes idempotency guards for duplicate deliveries.
+**Alternatives considered:** Wrapping checkout in a DB transaction with rollback on Stripe failure — rejected because the user would still be stuck if they cancelled on Stripe's hosted checkout page.
+
+---

@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Loader2, RefreshCw, Play, CheckCircle2, XCircle, Clock } from "lucide-react";
+import { Loader2, RefreshCw, Play, CheckCircle2, XCircle, Clock, Trash2 } from "lucide-react";
 import { Button } from "@frontend/components/ui/button.js";
 import { Input } from "@frontend/components/ui/input.js";
 import { Label } from "@frontend/components/ui/label.js";
@@ -22,6 +22,7 @@ import {
   useProvisioningStatus,
   useProvisionTenant,
   useRetryProvisioning,
+  useResetProvisioning,
 } from "@frontend/hooks/use-tenants.js";
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -53,6 +54,7 @@ export function ProvisioningTab({ tenantId }: ProvisioningTabProps): React.JSX.E
   });
   const provisionMutation = useProvisionTenant(tenantId);
   const retryMutation = useRetryProvisioning(tenantId);
+  const resetMutation = useResetProvisioning(tenantId);
 
   const [provisionDialogOpen, setProvisionDialogOpen] = useState(false);
   const [ownerEmail, setOwnerEmail] = useState("");
@@ -88,6 +90,15 @@ export function ProvisioningTab({ tenantId }: ProvisioningTabProps): React.JSX.E
     }
   }
 
+  async function handleReset(productId: string): Promise<void> {
+    setError("");
+    try {
+      await resetMutation.mutateAsync(productId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Reset failed");
+    }
+  }
+
   if (isPending) {
     return (
       <div className="flex justify-center py-12">
@@ -112,10 +123,15 @@ export function ProvisioningTab({ tenantId }: ProvisioningTabProps): React.JSX.E
               Schema provisioning status for each product backend
             </CardDescription>
           </div>
-          <Button size="sm" onClick={() => setProvisionDialogOpen(true)}>
-            <Play className="mr-2 h-3 w-3" />
-            Provision Tenant
-          </Button>
+          <div className="flex items-center gap-2">
+            <code className="bg-muted text-muted-foreground rounded px-2 py-1 text-xs">
+              {tenantId}
+            </code>
+            <Button size="sm" onClick={() => setProvisionDialogOpen(true)}>
+              <Play className="mr-2 h-3 w-3" />
+              Provision
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {!statuses || statuses.length === 0 ? (
@@ -165,24 +181,36 @@ export function ProvisioningTab({ tenantId }: ProvisioningTabProps): React.JSX.E
                       </div>
                     </dl>
 
-                    {row.status === "failed" && (
+                    <div className="mt-4 flex gap-2">
+                      {row.status !== "success" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1"
+                          disabled={retryMutation.isPending}
+                          onClick={() =>
+                            void handleRetry(row.productId as "safespec" | "nexum")
+                          }
+                        >
+                          {retryMutation.isPending ? (
+                            <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                          ) : (
+                            <RefreshCw className="mr-2 h-3 w-3" />
+                          )}
+                          {row.status === "dispatched" ? "Re-provision" : "Retry"}
+                        </Button>
+                      )}
                       <Button
-                        variant="outline"
+                        variant="ghost"
                         size="sm"
-                        className="mt-4 w-full"
-                        disabled={retryMutation.isPending}
-                        onClick={() =>
-                          void handleRetry(row.productId as "safespec" | "nexum")
-                        }
+                        className="text-destructive hover:text-destructive"
+                        disabled={resetMutation.isPending}
+                        onClick={() => void handleReset(row.productId)}
                       >
-                        {retryMutation.isPending ? (
-                          <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                        ) : (
-                          <RefreshCw className="mr-2 h-3 w-3" />
-                        )}
-                        Retry
+                        <Trash2 className="mr-2 h-3 w-3" />
+                        Reset
                       </Button>
-                    )}
+                    </div>
                   </CardContent>
                 </Card>
               ))}

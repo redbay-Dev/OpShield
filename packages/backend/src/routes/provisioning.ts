@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
+import { eq, and } from "drizzle-orm";
 import { requirePlatformAdmin } from "../middleware/require-platform-admin.js";
 import {
   requireServiceAuth,
@@ -16,6 +17,8 @@ import {
   getProvisioningStatus,
   handleProvisioningCallback,
 } from "../services/provisioning.js";
+import { db } from "../db/client.js";
+import { tenantProvisioning, auditLog } from "../db/schema/tenants.js";
 
 function formatProvisioningRow(
   row: { id: string; tenantId: string; productId: string; status: string; attempts: number; lastError: string | null; provisionedAt: Date | null; createdAt: Date; updatedAt: Date },
@@ -129,6 +132,52 @@ export async function provisioningRoutes(app: FastifyInstance): Promise<void> {
           error: { code: "NOT_FOUND", message },
         });
       }
+    },
+  );
+
+  // ── DELETE /tenants/:tenantId/provisioning/:productId — Reset provisioning record (platform admin) ──
+  app.delete(
+    "/tenants/:tenantId/provisioning/:productId",
+    { preHandler: [requirePlatformAdmin] },
+    async (request, reply) => {
+      const params = request.params as { tenantId?: string; productId?: string };
+      const tenantId = params.tenantId;
+      const productId = params.productId;
+
+      if (!tenantId || !productId) {
+        return reply.status(400).send({
+          success: false,
+          error: { code: "VALIDATION_ERROR", message: "Missing tenantId or productId" },
+        });
+      }
+
+      const deleted = await db
+        .delete(tenantProvisioning)
+        .where(
+          and(
+            eq(tenantProvisioning.tenantId, tenantId),
+            eq(tenantProvisioning.productId, productId),
+          ),
+        )
+        .returning({ id: tenantProvisioning.id });
+
+      if (deleted.length === 0) {
+        return reply.status(404).send({
+          success: false,
+          error: { code: "NOT_FOUND", message: "No provisioning record found" },
+        });
+      }
+
+      await db.insert(auditLog).values({
+        actorId: "platform_admin",
+        actorType: "admin",
+        action: "provisioning.reset",
+        resourceType: "tenant",
+        resourceId: tenantId,
+        metadata: { productId },
+      });
+
+      return reply.send({ success: true, data: null });
     },
   );
 

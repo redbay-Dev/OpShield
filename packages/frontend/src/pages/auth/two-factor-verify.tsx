@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate, useLocation } from "react-router";
+import { useLocation } from "react-router";
 import { Loader2 } from "lucide-react";
 import { Button } from "@frontend/components/ui/button.js";
 import {
@@ -19,10 +19,14 @@ export function TwoFactorVerifyPage(): React.JSX.Element {
   const [useBackup, setUseBackup] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
   const location = useLocation();
 
-  const from = (location.state as { from?: string } | null)?.from ?? "/admin";
+  // Prefer sessionStorage (set by login page before 2FA redirect),
+  // fall back to React Router state, then default to /admin
+  const from =
+    sessionStorage.getItem("auth_redirect") ??
+    (location.state as { from?: string } | null)?.from ??
+    "/admin";
 
   async function handleVerify(e: FormEvent): Promise<void> {
     e.preventDefault();
@@ -39,7 +43,12 @@ export function TwoFactorVerifyPage(): React.JSX.Element {
       return;
     }
 
-    void navigate(from, { replace: true });
+    sessionStorage.removeItem("auth_redirect");
+
+    // Full page navigation ensures cookies are picked up by subsequent requests.
+    // React Router's navigate() can race with cookie storage, causing
+    // ProtectedRoute to see a stale (unauthenticated) session.
+    window.location.href = from;
   }
 
   return (

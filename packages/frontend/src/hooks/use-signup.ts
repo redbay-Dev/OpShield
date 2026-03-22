@@ -7,8 +7,7 @@ interface SlugCheckResponse {
 }
 
 interface CheckoutResponse {
-  success: boolean;
-  data: { checkoutUrl: string };
+  checkoutUrl: string;
 }
 
 interface CheckoutInput {
@@ -35,7 +34,7 @@ export function useCheckout(): ReturnType<typeof useMutation<string, Error, Chec
   return useMutation({
     mutationFn: async (input: CheckoutInput): Promise<string> => {
       const result = await apiPost<CheckoutResponse>("/signup/checkout", input);
-      return result.data.checkoutUrl;
+      return result.checkoutUrl;
     },
   });
 }

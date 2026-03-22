@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { eq, and } from "drizzle-orm";
+import { eq, and, isNull } from "drizzle-orm";
 import type Stripe from "stripe";
 import { db } from "../db/client.js";
 import {
@@ -10,6 +10,7 @@ import {
   billingEvents,
 } from "../db/schema/billing.js";
 import { tenants, tenantModules, auditLog } from "../db/schema/tenants.js";
+import { tenantUsers } from "../db/schema/tenant-users.js";
 import { constructWebhookEvent, getStripeSubscription } from "../services/stripe.js";
 import { dispatchWebhook } from "../services/webhook.js";
 import { provisionTenant } from "../services/provisioning.js";
@@ -92,8 +93,30 @@ function getCustomerId(
 }
 
 /**
- * Handle checkout.session.completed — activate subscription, set tenant active,
- * upsert local subscription records, trigger provisioning.
+ * Parse module metadata from Stripe session.
+ */
+interface ModuleMeta {
+  productId: string;
+  moduleId: string;
+  tier: string;
+  includedUsers: number;
+}
+
+function parseModulesMeta(raw: string | undefined): ModuleMeta[] {
+  if (!raw) return [];
+  try {
+    return JSON.parse(raw) as ModuleMeta[];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Handle checkout.session.completed — create tenant (if new signup),
+ * activate subscription, trigger provisioning.
+ *
+ * For new signups: tenant data lives in session.metadata (set by POST /signup/checkout).
+ * For reactivations: tenant already exists, just update status.
  */
 async function handleCheckoutCompleted(
   event: Stripe.Event,
@@ -105,41 +128,78 @@ async function handleCheckoutCompleted(
   const customerId = getCustomerId(session.customer);
   if (!customerId) return;
 
-  const tenantId = await resolveTenantId(customerId);
-  if (!tenantId) return;
-
   const stripeSubId = typeof session.subscription === "string"
     ? session.subscription
     : session.subscription?.id ?? null;
 
-  // Capture tenant status before update for reactivation detection
-  const [tenantBefore] = await db
-    .select({ status: tenants.status })
-    .from(tenants)
-    .where(eq(tenants.id, tenantId))
-    .limit(1);
-  const wasSuspended = tenantBefore?.status === "suspended";
-  const wasOnboarding = tenantBefore?.status === "onboarding";
+  // Check if this is a new signup (has companyName in metadata) or a reactivation
+  const isNewSignup = Boolean(session.metadata?.companyName);
 
-  if (stripeSubId) {
-    // Upsert local subscription — may not exist yet (self-service checkout creates
-    // the Stripe subscription via Checkout Session, not our admin endpoint)
-    const [existingSub] = await db
-      .select({ id: subscriptions.id })
-      .from(subscriptions)
-      .where(eq(subscriptions.stripeSubscriptionId, stripeSubId))
+  let tenantId: string | null;
+
+  if (isNewSignup) {
+    // ── New signup — create tenant, modules, user link ──
+    const companyName = session.metadata?.companyName ?? "Unknown";
+    const companySlug = session.metadata?.companySlug ?? "";
+    const billingEmail = session.metadata?.billingEmail ?? "";
+    const userId = session.metadata?.userId ?? "";
+    const modulesMeta = parseModulesMeta(session.metadata?.modules);
+
+    if (!companySlug || !userId) return;
+
+    // Guard against duplicate tenant creation (idempotency)
+    const [existingTenant] = await db
+      .select({ id: tenants.id })
+      .from(tenants)
+      .where(and(eq(tenants.slug, companySlug), isNull(tenants.deletedAt)))
       .limit(1);
 
-    if (existingSub) {
+    if (existingTenant) {
+      // Tenant already exists — this is a duplicate webhook delivery
+      tenantId = existingTenant.id;
       await db
-        .update(subscriptions)
-        .set({ status: "active", updatedAt: new Date() })
-        .where(eq(subscriptions.stripeSubscriptionId, stripeSubId));
+        .update(tenants)
+        .set({ status: "active", stripeCustomerId: customerId, updatedAt: new Date() })
+        .where(eq(tenants.id, tenantId));
     } else {
-      // Create local subscription from Stripe data
+      // Create tenant
+      const [newTenant] = await db
+        .insert(tenants)
+        .values({
+          name: companyName,
+          slug: companySlug,
+          status: "active",
+          billingEmail,
+          stripeCustomerId: customerId,
+        })
+        .returning();
+
+      if (!newTenant) return;
+      tenantId = newTenant.id;
+
+      // Insert modules
+      for (const mod of modulesMeta) {
+        await db.insert(tenantModules).values({
+          tenantId,
+          productId: mod.productId,
+          moduleId: mod.moduleId,
+          status: "active",
+          maxUsers: mod.includedUsers,
+        });
+      }
+
+      // Link user as owner
+      await db.insert(tenantUsers).values({
+        userId,
+        tenantId,
+        role: "owner",
+      });
+    }
+
+    // Create subscription record
+    if (stripeSubId) {
       const stripeSub = await getStripeSubscription(stripeSubId);
 
-      // Determine coupon from tenant's active modules
       const modules = await db
         .select({ productId: tenantModules.productId, moduleId: tenantModules.moduleId })
         .from(tenantModules)
@@ -159,7 +219,7 @@ async function handleCheckoutCompleted(
         })
         .returning();
 
-      // Create subscription items from tenant modules + plan lookups
+      // Create subscription items
       if (newSub) {
         for (const mod of modules) {
           const [plan] = await db
@@ -175,7 +235,6 @@ async function handleCheckoutCompleted(
             .limit(1);
 
           if (plan) {
-            // Find matching Stripe item
             const stripeItem = stripeSub.items.data.find(
               (si) => si.price.id === plan.stripePriceId,
             );
@@ -193,21 +252,7 @@ async function handleCheckoutCompleted(
       }
     }
 
-    await db
-      .update(tenants)
-      .set({ status: "active", updatedAt: new Date() })
-      .where(eq(tenants.id, tenantId));
-  }
-
-  if (wasSuspended) {
-    dispatchWebhook("tenant.reactivated", tenantId, {
-      subscriptionId: stripeSubId,
-    });
-  }
-
-  // Trigger provisioning for new sign-ups (tenant was onboarding → now active)
-  if (wasOnboarding) {
-    const userId = session.metadata?.userId ?? undefined;
+    // Trigger provisioning
     void provisionTenant(tenantId, {
       ownerUserId: userId,
     });
@@ -226,6 +271,93 @@ async function handleCheckoutCompleted(
         loginUrl: config.frontendUrl,
       }).catch(() => { /* email failure should not block webhook */ });
     }
+  } else {
+    // ── Reactivation — tenant already exists ──
+    tenantId = await resolveTenantId(customerId);
+    if (!tenantId) return;
+
+    const [tenantBefore] = await db
+      .select({ status: tenants.status })
+      .from(tenants)
+      .where(eq(tenants.id, tenantId))
+      .limit(1);
+
+    if (stripeSubId) {
+      const [existingSub] = await db
+        .select({ id: subscriptions.id })
+        .from(subscriptions)
+        .where(eq(subscriptions.stripeSubscriptionId, stripeSubId))
+        .limit(1);
+
+      if (existingSub) {
+        await db
+          .update(subscriptions)
+          .set({ status: "active", updatedAt: new Date() })
+          .where(eq(subscriptions.stripeSubscriptionId, stripeSubId));
+      } else {
+        const stripeSub = await getStripeSubscription(stripeSubId);
+        const modules = await db
+          .select({ productId: tenantModules.productId, moduleId: tenantModules.moduleId })
+          .from(tenantModules)
+          .where(and(eq(tenantModules.tenantId, tenantId), eq(tenantModules.status, "active")));
+
+        const couponId = determineCouponId(modules);
+
+        const [newSub] = await db
+          .insert(subscriptions)
+          .values({
+            tenantId,
+            stripeSubscriptionId: stripeSubId,
+            status: "active",
+            currentPeriodStart: new Date(stripeSub.start_date * 1000),
+            cancelAtPeriodEnd: stripeSub.cancel_at_period_end,
+            stripeCouponId: couponId ?? null,
+          })
+          .returning();
+
+        if (newSub) {
+          for (const mod of modules) {
+            const [plan] = await db
+              .select()
+              .from(plans)
+              .where(
+                and(
+                  eq(plans.productId, mod.productId),
+                  eq(plans.moduleId, mod.moduleId),
+                  eq(plans.isActive, "true"),
+                ),
+              )
+              .limit(1);
+
+            if (plan) {
+              const stripeItem = stripeSub.items.data.find(
+                (si) => si.price.id === plan.stripePriceId,
+              );
+
+              await db.insert(subscriptionItems).values({
+                subscriptionId: newSub.id,
+                stripeItemId: stripeItem?.id ?? null,
+                planId: plan.id,
+                moduleId: mod.moduleId,
+                productId: mod.productId,
+                quantity: 1,
+              });
+            }
+          }
+        }
+      }
+
+      await db
+        .update(tenants)
+        .set({ status: "active", updatedAt: new Date() })
+        .where(eq(tenants.id, tenantId));
+    }
+
+    if (tenantBefore?.status === "suspended") {
+      dispatchWebhook("tenant.reactivated", tenantId, {
+        subscriptionId: stripeSubId,
+      });
+    }
   }
 
   await logBillingEvent({
@@ -238,7 +370,7 @@ async function handleCheckoutCompleted(
   await db.insert(auditLog).values({
     actorId: "stripe",
     actorType: "system",
-    action: "subscription.activated",
+    action: isNewSignup ? "tenant.created_from_checkout" : "subscription.reactivated",
     resourceType: "subscription",
     resourceId: stripeSubId ?? session.id,
     metadata: { tenantId, eventId: event.id },

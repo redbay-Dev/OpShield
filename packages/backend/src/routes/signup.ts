@@ -98,21 +98,45 @@ export async function signupRoutes(app: FastifyInstance): Promise<void> {
       const authUser = (request as unknown as { authUser: AuthenticatedUser }).authUser;
       const { companyName, companySlug, billingEmail, billingInterval, modules } = bodyParsed.data;
 
-      // Check user doesn't already own a tenant
-      const [existingOwnership] = await db
-        .select({ id: tenantUsers.id })
+      // Check user doesn't already own an active tenant
+      const ownedTenants = await db
+        .select({
+          tenantUserId: tenantUsers.id,
+          tenantId: tenantUsers.tenantId,
+          tenantStatus: tenants.status,
+        })
         .from(tenantUsers)
-        .where(and(eq(tenantUsers.userId, authUser.id), eq(tenantUsers.role, "owner")))
-        .limit(1);
+        .innerJoin(tenants, eq(tenantUsers.tenantId, tenants.id))
+        .where(
+          and(
+            eq(tenantUsers.userId, authUser.id),
+            eq(tenantUsers.role, "owner"),
+            isNull(tenants.deletedAt),
+          ),
+        );
 
-      if (existingOwnership) {
+      // If user owns an active/suspended tenant, block signup
+      const activeTenant = ownedTenants.find(
+        (t) => t.tenantStatus === "active" || t.tenantStatus === "suspended",
+      );
+      if (activeTenant) {
         return reply.status(409).send({
           success: false,
           error: {
             code: "CONFLICT",
-            message: "You already own a tenant. Contact support to manage your account.",
+            message: "You already own a tenant. Go to your account to manage it.",
           },
         });
+      }
+
+      // Clean up any orphaned onboarding tenants from failed payment attempts
+      for (const orphan of ownedTenants.filter((t) => t.tenantStatus === "onboarding")) {
+        await db.delete(tenantModules).where(eq(tenantModules.tenantId, orphan.tenantId));
+        await db.delete(tenantUsers).where(eq(tenantUsers.id, orphan.tenantUserId));
+        await db
+          .update(tenants)
+          .set({ deletedAt: new Date(), updatedAt: new Date() })
+          .where(eq(tenants.id, orphan.tenantId));
       }
 
       // Validate slug uniqueness
@@ -226,65 +250,34 @@ export async function signupRoutes(app: FastifyInstance): Promise<void> {
         modulePlans.push({ selection: mod, plan });
       }
 
-      // Create tenant, modules, and user link in a transaction
-      const [tenant] = await db
-        .insert(tenants)
-        .values({
-          name: companyName,
-          slug: companySlug,
-          status: "onboarding",
-          billingEmail,
-        })
-        .returning();
-
-      if (!tenant) {
-        return reply.status(500).send({
-          success: false,
-          error: { code: "INTERNAL_ERROR", message: "Failed to create tenant" },
-        });
-      }
-
-      // Insert modules
-      for (const { selection, plan } of modulePlans) {
-        await db.insert(tenantModules).values({
-          tenantId: tenant.id,
-          productId: selection.productId,
-          moduleId: selection.moduleId,
-          status: "active",
-          maxUsers: plan.includedUsers,
-        });
-      }
-
-      // Link user as owner
-      await db.insert(tenantUsers).values({
-        userId: authUser.id,
-        tenantId: tenant.id,
-        role: "owner",
-      });
-
-      // Create Stripe customer
+      // Create Stripe customer (no tenant yet — created after payment succeeds)
       const customer = await createStripeCustomer(
         companyName,
         billingEmail,
-        { tenantId: tenant.id, tenantSlug: companySlug },
+        { tenantSlug: companySlug },
       );
-
-      await db
-        .update(tenants)
-        .set({ stripeCustomerId: customer.id, updatedAt: new Date() })
-        .where(eq(tenants.id, tenant.id));
 
       // Build Stripe Checkout Session line items
       const lineItems: Array<{ price: string; quantity: number }> = [];
       for (const { plan } of modulePlans) {
-        // Base price (validated non-null above)
         lineItems.push({ price: plan.stripePriceId!, quantity: 1 });
       }
 
       // Determine bundle coupon
       const couponId = determineCouponId(modules);
 
-      // Create Stripe Checkout Session
+      // Encode module selections as JSON for Stripe metadata
+      // Stripe metadata values are strings with max 500 chars
+      const modulesMeta = JSON.stringify(
+        modulePlans.map(({ selection, plan }) => ({
+          productId: selection.productId,
+          moduleId: selection.moduleId,
+          tier: selection.tier,
+          includedUsers: plan.includedUsers,
+        })),
+      );
+
+      // Create Stripe Checkout Session — tenant will be created in the webhook
       const checkoutSession = await stripe.checkout.sessions.create({
         customer: customer.id,
         mode: "subscription",
@@ -293,12 +286,16 @@ export async function signupRoutes(app: FastifyInstance): Promise<void> {
         success_url: `${config.frontendUrl}/signup/success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${config.frontendUrl}/signup/cancelled`,
         subscription_data: {
-          metadata: { tenantId: tenant.id, tenantSlug: companySlug },
+          metadata: { tenantSlug: companySlug },
         },
         metadata: {
-          tenantId: tenant.id,
           userId: authUser.id,
           userName: authUser.name,
+          companyName,
+          companySlug,
+          billingEmail,
+          billingInterval,
+          modules: modulesMeta,
         },
       });
 
@@ -307,14 +304,14 @@ export async function signupRoutes(app: FastifyInstance): Promise<void> {
         actorId: authUser.id,
         actorType: "user",
         action: "signup.checkout_initiated",
-        resourceType: "tenant",
-        resourceId: tenant.id,
+        resourceType: "checkout",
+        resourceId: checkoutSession.id,
         metadata: {
           companyName,
           companySlug,
           billingInterval,
           moduleCount: modules.length,
-          checkoutSessionId: checkoutSession.id,
+          stripeCustomerId: customer.id,
         },
       });
 

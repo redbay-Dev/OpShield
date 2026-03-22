@@ -159,6 +159,13 @@ export function retryProvisioning(
   );
 }
 
+export function resetProvisioning(
+  tenantId: string,
+  productId: string,
+): Promise<void> {
+  return apiDelete(`/tenants/${tenantId}/provisioning/${productId}`);
+}
+
 // ── Tenant Actions (Danger Zone) ──
 
 interface TenantActionInput {

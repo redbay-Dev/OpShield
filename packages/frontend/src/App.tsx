@@ -27,6 +27,7 @@ import { PricingPage } from "@frontend/pages/public/pricing.js";
 import { StepAccountPage } from "@frontend/pages/signup/step-account.js";
 import { StepTwoFactorPage } from "@frontend/pages/signup/step-two-factor.js";
 import { StepCompanyPage } from "@frontend/pages/signup/step-company.js";
+import { StepPlanBuilderPage } from "@frontend/pages/signup/step-plan-builder.js";
 import { StepReviewPage } from "@frontend/pages/signup/step-review.js";
 import { CheckoutSuccessPage } from "@frontend/pages/signup/checkout-success.js";
 import { CheckoutCancelledPage } from "@frontend/pages/signup/checkout-cancelled.js";
@@ -65,6 +66,7 @@ export function App(): React.JSX.Element {
         <Route element={<ProtectedRoute />}>
           <Route path="signup/2fa-setup" element={<StepTwoFactorPage />} />
           <Route path="signup/company" element={<StepCompanyPage />} />
+          <Route path="signup/plan" element={<StepPlanBuilderPage />} />
           <Route path="signup/review" element={<StepReviewPage />} />
           <Route path="signup/success" element={<CheckoutSuccessPage />} />
           <Route path="signup/cancelled" element={<CheckoutCancelledPage />} />

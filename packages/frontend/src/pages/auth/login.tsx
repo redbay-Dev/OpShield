@@ -32,6 +32,10 @@ export function LoginPage(): React.JSX.Element {
     setError("");
     setLoading(true);
 
+    // Store redirect target so the 2FA verify page knows where to go
+    // (window.location.href in onTwoFactorRedirect loses React Router state)
+    sessionStorage.setItem("auth_redirect", from);
+
     const result = await authClient.signIn.email(
       { email, password },
       {
@@ -45,6 +49,12 @@ export function LoginPage(): React.JSX.Element {
     if (result.error) {
       setError(result.error.message ?? "Sign in failed");
       setLoading(false);
+      return;
+    }
+
+    // If 2FA is required, the twoFactorClient plugin already triggered
+    // onTwoFactorRedirect — don't override that navigation.
+    if (result.data && "twoFactorRedirect" in result.data) {
       return;
     }
 

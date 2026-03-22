@@ -1,22 +1,15 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Loader2,
-  Plus,
-  Pencil,
-  Power,
-  PowerOff,
-  DollarSign,
-  Users,
-  Package,
-  X,
-  Trash2,
+  Save,
+  Check,
+  ShieldCheck,
+  Truck,
+  type LucideIcon,
 } from "lucide-react";
 import { Button } from "@frontend/components/ui/button.js";
 import { Input } from "@frontend/components/ui/input.js";
-import { Label } from "@frontend/components/ui/label.js";
-import { Badge } from "@frontend/components/ui/badge.js";
-import { Checkbox } from "@frontend/components/ui/checkbox.js";
 import {
   Card,
   CardContent,
@@ -24,32 +17,18 @@ import {
   CardHeader,
   CardTitle,
 } from "@frontend/components/ui/card.js";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@frontend/components/ui/dialog.js";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@frontend/components/ui/select.js";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@frontend/components/ui/table.js";
+import { Separator } from "@frontend/components/ui/separator.js";
 import { toast } from "sonner";
-import { apiGet, apiPost, apiPatch, apiDelete } from "@frontend/api/client.js";
+import { apiGet, apiPost, apiPatch } from "@frontend/api/client.js";
 import { useAdminPermissions } from "@frontend/hooks/use-admin-permissions.js";
+import {
+  PRODUCT_CONFIG,
+  PRODUCT_IDS,
+  type TierConfig,
+  type BaseModuleConfig,
+  type AddonConfig,
+} from "@opshield/shared/constants";
+import { cn } from "@frontend/lib/utils.js";
 
 // ── Types ──
 
@@ -71,97 +50,39 @@ interface Plan {
   updatedAt: string;
 }
 
-/** Per-module pricing entry in the create form */
-interface ModulePricing {
-  moduleId: string;
+/** What the user edits per tier row */
+interface TierPriceRow {
   basePrice: string;
+  includedUsers: string;
   perUserPrice: string;
-  includedUsers: number;
 }
 
-interface EditFormData {
-  name: string;
+/** What the user edits per add-on row */
+interface AddonPriceRow {
   basePrice: string;
-  includedUsers: number;
-  perUserPrice: string;
-  features: string;
 }
 
-// ── Constants ──
+const ICON_MAP: Record<string, LucideIcon> = { ShieldCheck, Truck };
 
-interface ModuleOption {
-  value: string;
-  label: string;
-  product: string;
-}
-
-const SAFESPEC_MODULES: ModuleOption[] = [
-  { value: "safespec-whs", label: "WHS Module", product: "safespec" },
-  { value: "safespec-hva", label: "HVA Compliance", product: "safespec" },
-  { value: "safespec-fleet-maintenance", label: "Fleet Maintenance", product: "safespec" },
-];
-
-const NEXUM_MODULES: ModuleOption[] = [
-  { value: "nexum-core", label: "Nexum Core", product: "nexum" },
-  { value: "nexum-invoicing", label: "Invoicing", product: "nexum" },
-  { value: "nexum-rcti", label: "RCTI", product: "nexum" },
-  { value: "nexum-xero", label: "Xero Integration", product: "nexum" },
-  { value: "nexum-compliance", label: "Compliance", product: "nexum" },
-  { value: "nexum-sms", label: "SMS Messaging", product: "nexum" },
-  { value: "nexum-dockets", label: "Docket Processing", product: "nexum" },
-  { value: "nexum-materials", label: "Materials", product: "nexum" },
-  { value: "nexum-map-planning", label: "Map Planning", product: "nexum" },
-  { value: "nexum-ai", label: "AI Automation", product: "nexum" },
-  { value: "nexum-reporting", label: "Reporting & Analytics", product: "nexum" },
-  { value: "nexum-portal", label: "Portal", product: "nexum" },
-];
-
-const ALL_MODULE_OPTIONS = [...SAFESPEC_MODULES, ...NEXUM_MODULES];
-
-const MODULE_LABELS: Record<string, string> = Object.fromEntries(
-  ALL_MODULE_OPTIONS.map((m) => [m.value, m.label]),
-);
-
-const MODULE_PRODUCT: Record<string, string> = Object.fromEntries(
-  ALL_MODULE_OPTIONS.map((m) => [m.value, m.product]),
-);
-
-const PRODUCT_LABELS: Record<string, string> = {
-  safespec: "SafeSpec",
-  nexum: "Nexum",
-};
-
-/** Ensure price string matches XX.XX format required by backend */
 function formatDecimal(value: string): string {
   const num = parseFloat(value);
   if (isNaN(num)) return "0.00";
   return num.toFixed(2);
 }
 
-// ── Component ──
+// ── Main Component ──
 
 export function PlansPage(): React.JSX.Element {
   const queryClient = useQueryClient();
-  const { canCreate, canUpdate, canDelete } = useAdminPermissions();
+  const { canUpdate } = useAdminPermissions();
 
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
-
-  // Create form state
-  const [createName, setCreateName] = useState("");
-  const [createTier, setCreateTier] = useState("");
-  const [createInterval, setCreateInterval] = useState("monthly");
-  const [createFeatures, setCreateFeatures] = useState("");
-  const [modulePricings, setModulePricings] = useState<ModulePricing[]>([]);
-
-  // Edit form state
-  const [editForm, setEditForm] = useState<EditFormData>({
-    name: "", basePrice: "", includedUsers: 5, perUserPrice: "0.00", features: "",
-  });
-
-  const [filterProduct, setFilterProduct] = useState<string>("all");
-
-  // ── Queries ──
+  // Track which rows are being edited and their values
+  const [editingTiers, setEditingTiers] = useState<
+    Record<string, TierPriceRow>
+  >({});
+  const [editingAddons, setEditingAddons] = useState<
+    Record<string, AddonPriceRow>
+  >({});
 
   const { data: plans, isPending } = useQuery({
     queryKey: ["admin-plans"],
@@ -170,677 +91,571 @@ export function PlansPage(): React.JSX.Element {
     },
   });
 
-  // ── Mutations ──
+  // Index plans by moduleId+tier+interval for fast lookup
+  const planIndex = useMemo(() => {
+    const idx: Record<string, Plan> = {};
+    for (const plan of plans ?? []) {
+      idx[`${plan.moduleId}:${plan.tier}:${plan.billingInterval}`] = plan;
+    }
+    return idx;
+  }, [plans]);
 
-  const createMutation = useMutation({
-    mutationFn: async (): Promise<void> => {
-      const features = createFeatures
-        .split("\n")
-        .map((f) => f.trim())
-        .filter(Boolean);
+  function findPlan(
+    moduleId: string,
+    tier: string,
+    interval: string,
+  ): Plan | undefined {
+    return planIndex[`${moduleId}:${tier}:${interval}`];
+  }
 
-      for (const mp of modulePricings) {
-        const productId = MODULE_PRODUCT[mp.moduleId];
-        if (!productId) continue;
+  // ── Save mutation (create or update a plan) ──
 
+  const saveMutation = useMutation({
+    mutationFn: async ({
+      productId,
+      moduleId,
+      tier,
+      name,
+      basePrice,
+      includedUsers,
+      perUserPrice,
+    }: {
+      productId: string;
+      moduleId: string;
+      tier: string;
+      name: string;
+      basePrice: string;
+      includedUsers: number;
+      perUserPrice: string;
+    }): Promise<void> => {
+      // Save both monthly and annual at once
+      const monthlyPlan = findPlan(moduleId, tier, "monthly");
+      const annualMultiplier = 10; // 2 months free
+      const monthlyBase = parseFloat(basePrice);
+      const annualBase = monthlyBase * annualMultiplier;
+
+      if (monthlyPlan) {
+        await apiPatch(`/plans/${monthlyPlan.id}`, {
+          name,
+          basePrice: formatDecimal(basePrice),
+          includedUsers,
+          perUserPrice: formatDecimal(perUserPrice),
+        });
+      } else {
         await apiPost("/plans", {
-          name: createName,
+          name,
           productId,
-          moduleId: mp.moduleId,
-          tier: createTier,
-          basePrice: formatDecimal(mp.basePrice),
-          includedUsers: mp.includedUsers,
-          perUserPrice: formatDecimal(mp.perUserPrice),
-          billingInterval: createInterval,
-          features,
+          moduleId,
+          tier,
+          basePrice: formatDecimal(basePrice),
+          includedUsers,
+          perUserPrice: formatDecimal(perUserPrice),
+          billingInterval: "monthly",
+          features: [],
+        });
+      }
+
+      const annualPlan = findPlan(moduleId, tier, "annual");
+      if (annualPlan) {
+        await apiPatch(`/plans/${annualPlan.id}`, {
+          name,
+          basePrice: formatDecimal(annualBase.toString()),
+          includedUsers,
+          perUserPrice: formatDecimal(perUserPrice),
+        });
+      } else {
+        await apiPost("/plans", {
+          name,
+          productId,
+          moduleId,
+          tier,
+          basePrice: formatDecimal(annualBase.toString()),
+          includedUsers,
+          perUserPrice: formatDecimal(perUserPrice),
+          billingInterval: "annual",
+          features: [],
         });
       }
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["admin-plans"] });
-      toast.success(`Created ${modulePricings.length} plan${modulePricings.length > 1 ? "s" : ""}`);
-      closeDialog();
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["admin-plans"] });
+      toast.success("Price saved");
     },
     onError: (err: Error) => toast.error(err.message),
   });
 
-  const updateMutation = useMutation({
-    mutationFn: async ({
-      planId,
-      data,
-    }: {
-      planId: string;
-      data: EditFormData;
-    }): Promise<void> => {
-      await apiPatch(`/plans/${planId}`, {
-        name: data.name,
-        basePrice: formatDecimal(data.basePrice),
-        includedUsers: data.includedUsers,
-        perUserPrice: formatDecimal(data.perUserPrice),
-        features: data.features
-          .split("\n")
-          .map((f) => f.trim())
-          .filter(Boolean),
+  // ── Tier editing helpers ──
+
+  function tierKey(moduleId: string, tierId: string): string {
+    return `${moduleId}:${tierId}`;
+  }
+
+  function startEditTier(
+    moduleId: string,
+    tierId: string,
+    existing: Plan | undefined,
+  ): void {
+    const key = tierKey(moduleId, tierId);
+    setEditingTiers((prev) => ({
+      ...prev,
+      [key]: {
+        basePrice: existing?.basePrice ?? "",
+        includedUsers: String(existing?.includedUsers ?? 5),
+        perUserPrice: existing?.perUserPrice ?? "0",
+      },
+    }));
+  }
+
+  function updateTierField(
+    key: string,
+    field: keyof TierPriceRow,
+    value: string,
+  ): void {
+    setEditingTiers((prev) => {
+      const existing: TierPriceRow = prev[key] ?? {
+        basePrice: "",
+        includedUsers: "5",
+        perUserPrice: "0",
+      };
+      return { ...prev, [key]: { ...existing, [field]: value } };
+    });
+  }
+
+  function saveTier(
+    productId: string,
+    moduleId: string,
+    tier: TierConfig,
+  ): void {
+    const key = tierKey(moduleId, tier.id);
+    const row = editingTiers[key];
+    if (!row || !row.basePrice) return;
+
+    void saveMutation
+      .mutateAsync({
+        productId,
+        moduleId,
+        tier: tier.id,
+        name: `${tier.label}`,
+        basePrice: row.basePrice,
+        includedUsers: parseInt(row.includedUsers, 10) || 5,
+        perUserPrice: row.perUserPrice,
+      })
+      .then(() => {
+        setEditingTiers((prev) => {
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        });
       });
-    },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["admin-plans"] });
-      toast.success("Plan updated");
-      closeDialog();
-    },
-    onError: (err: Error) => toast.error(err.message),
-  });
-
-  const toggleActiveMutation = useMutation({
-    mutationFn: async ({
-      planId,
-      activate,
-    }: {
-      planId: string;
-      activate: boolean;
-    }): Promise<void> => {
-      if (activate) {
-        await apiPatch(`/plans/${planId}`, { isActive: "true" });
-      } else {
-        await apiDelete(`/plans/${planId}`);
-      }
-    },
-    onSuccess: (_data, variables) => {
-      void queryClient.invalidateQueries({ queryKey: ["admin-plans"] });
-      toast.success(variables.activate ? "Plan reactivated" : "Plan deactivated");
-    },
-    onError: (err: Error) => toast.error(err.message),
-  });
-
-  const permanentDeleteMutation = useMutation({
-    mutationFn: async (planId: string): Promise<void> => {
-      await apiDelete(`/plans/${planId}/permanent`);
-    },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["admin-plans"] });
-      toast.success("Plan permanently deleted");
-    },
-    onError: (err: Error) => toast.error(err.message),
-  });
-
-  // ── Handlers ──
-
-  function closeDialog(): void {
-    setDialogOpen(false);
-    setEditingPlan(null);
-    setCreateName("");
-    setCreateTier("");
-    setCreateInterval("monthly");
-    setCreateFeatures("");
-    setModulePricings([]);
-    setEditForm({ name: "", basePrice: "", includedUsers: 5, perUserPrice: "0.00", features: "" });
   }
 
-  function openCreate(): void {
-    setEditingPlan(null);
-    setCreateName("");
-    setCreateTier("");
-    setCreateInterval("monthly");
-    setCreateFeatures("");
-    setModulePricings([]);
-    setDialogOpen(true);
+  // ── Add-on editing helpers ──
+
+  function startEditAddon(
+    addonId: string,
+    existing: Plan | undefined,
+  ): void {
+    setEditingAddons((prev) => ({
+      ...prev,
+      [addonId]: {
+        basePrice: existing?.basePrice ?? "",
+      },
+    }));
   }
 
-  function openEdit(plan: Plan): void {
-    setEditingPlan(plan);
-    setEditForm({
-      name: plan.name,
-      basePrice: plan.basePrice,
-      includedUsers: plan.includedUsers,
-      perUserPrice: plan.perUserPrice,
-      features: (plan.features ?? []).join("\n"),
-    });
-    setDialogOpen(true);
+  function saveAddon(
+    productId: string,
+    addon: AddonConfig,
+  ): void {
+    const row = editingAddons[addon.id];
+    if (!row || !row.basePrice) return;
+
+    void saveMutation
+      .mutateAsync({
+        productId,
+        moduleId: addon.id,
+        tier: "standard",
+        name: addon.name,
+        basePrice: row.basePrice,
+        includedUsers: 0,
+        perUserPrice: "0",
+      })
+      .then(() => {
+        setEditingAddons((prev) => {
+          const next = { ...prev };
+          delete next[addon.id];
+          return next;
+        });
+      });
   }
-
-  function toggleModule(moduleId: string): void {
-    setModulePricings((prev) => {
-      const exists = prev.find((m) => m.moduleId === moduleId);
-      if (exists) {
-        return prev.filter((m) => m.moduleId !== moduleId);
-      }
-      return [...prev, { moduleId, basePrice: "", perUserPrice: "0.00", includedUsers: 5 }];
-    });
-  }
-
-  function updateModulePricing(moduleId: string, field: keyof ModulePricing, value: string | number): void {
-    setModulePricings((prev) =>
-      prev.map((m) =>
-        m.moduleId === moduleId ? { ...m, [field]: value } : m,
-      ),
-    );
-  }
-
-  function handleSubmit(): void {
-    if (editingPlan) {
-      void updateMutation.mutate({ planId: editingPlan.id, data: editForm });
-    } else {
-      void createMutation.mutate();
-    }
-  }
-
-  const isSubmitting = createMutation.isPending || updateMutation.isPending;
-  const isCreateValid =
-    createName &&
-    createTier &&
-    modulePricings.length > 0 &&
-    modulePricings.every((m) => m.basePrice);
-  const isEditValid = editForm.name && editForm.basePrice;
-  const isFormValid = editingPlan ? isEditValid : isCreateValid;
-
-  // ── Filter ──
-
-  const filteredPlans =
-    filterProduct === "all"
-      ? plans
-      : plans?.filter((p) => p.productId === filterProduct);
-
-  const activePlans = filteredPlans?.filter((p) => p.isActive === "true") ?? [];
-  const inactivePlans =
-    filteredPlans?.filter((p) => p.isActive !== "true") ?? [];
 
   // ── Render ──
 
   if (isPending) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <Loader2 className="size-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
+  const totalPlans = plans?.length ?? 0;
+  const activePlans =
+    plans?.filter((p) => p.isActive === "true").length ?? 0;
+  const linkedPlans =
+    plans?.filter((p) => p.stripePriceId).length ?? 0;
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Billing Plans</h1>
-          <p className="text-muted-foreground">
-            Manage pricing plans for all products and modules.
-          </p>
-        </div>
-        {canCreate && (
-          <Button onClick={openCreate}>
-            <Plus className="mr-2 h-4 w-4" />
-            Create Plans
-          </Button>
-        )}
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Pricing</h1>
+        <p className="text-muted-foreground">
+          Set the price for each product tier and add-on. Prices sync to
+          Stripe automatically.
+        </p>
       </div>
-
 
       {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Plans</CardTitle>
-            <Package className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{plans?.length ?? 0}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Plans</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {plans?.filter((p) => p.isActive === "true").length ?? 0}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Products Covered</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {new Set(plans?.map((p) => p.productId)).size}
-            </div>
-          </CardContent>
-        </Card>
+      <div className="flex gap-4 text-sm text-muted-foreground">
+        <span>{totalPlans} prices configured</span>
+        <span>&middot;</span>
+        <span>{activePlans} active</span>
+        <span>&middot;</span>
+        <span>{linkedPlans} synced to Stripe</span>
       </div>
 
-      {/* Filter */}
-      <div className="flex items-center gap-3">
-        <Label className="text-sm text-muted-foreground">Filter by product:</Label>
-        <Select value={filterProduct} onValueChange={setFilterProduct}>
-          <SelectTrigger className="w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Products</SelectItem>
-            <SelectItem value="safespec">SafeSpec</SelectItem>
-            <SelectItem value="nexum">Nexum</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      {/* Product sections */}
+      {PRODUCT_IDS.map((productId) => {
+        const config = PRODUCT_CONFIG[productId];
+        const Icon = ICON_MAP[config.icon];
 
-      {/* Active Plans Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">
-            Active Plans ({activePlans.length})
-          </CardTitle>
-          <CardDescription>
-            Plans currently available for purchase.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {activePlans.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              No active plans. Create one to enable the sign-up flow.
-            </p>
-          ) : (
-            <PlanTable
-              plans={activePlans}
-              canUpdate={canUpdate}
-              canDelete={canDelete}
-              onEdit={openEdit}
-              onToggleActive={(planId) =>
-                void toggleActiveMutation.mutate({ planId, activate: false })
-              }
-              isActive
-            />
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Inactive Plans */}
-      {inactivePlans.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">
-              Inactive Plans ({inactivePlans.length})
-            </CardTitle>
-            <CardDescription>
-              Deactivated plans. Existing subscriptions still reference these.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <PlanTable
-              plans={inactivePlans}
-              canUpdate={canUpdate}
-              canDelete={canDelete}
-              onEdit={openEdit}
-              onToggleActive={(planId) =>
-                void toggleActiveMutation.mutate({ planId, activate: true })
-              }
-              onPermanentDelete={(planId) =>
-                void permanentDeleteMutation.mutate(planId)
-              }
-              isActive={false}
-            />
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Create / Edit Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) closeDialog(); }}>
-        <DialogContent className={editingPlan ? "sm:max-w-lg" : "sm:max-w-2xl max-h-[90vh] overflow-y-auto"}>
-          <DialogHeader>
-            <DialogTitle>
-              {editingPlan ? `Edit Plan: ${editingPlan.name}` : "Create Plans"}
-            </DialogTitle>
-            <DialogDescription>
-              {editingPlan
-                ? "Update pricing and features."
-                : "Select modules and set individual pricing for each."}
-            </DialogDescription>
-          </DialogHeader>
-
-          {editingPlan ? (
-            /* ── Edit Form ── */
-            <div className="grid gap-4 py-2">
-              <div className="grid gap-2">
-                <Label htmlFor="edit-name">Plan Name</Label>
-                <Input
-                  id="edit-name"
-                  value={editForm.name}
-                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+        return (
+          <Card key={productId}>
+            <CardHeader className="pb-4">
+              <div className="flex items-center gap-3">
+                {Icon && (
+                  <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <Icon className="size-4" />
+                  </div>
+                )}
+                <div>
+                  <CardTitle className="text-lg">{config.name}</CardTitle>
+                  <CardDescription className="text-xs">
+                    {config.tagline}
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Base modules with tiers */}
+              {config.baseModules.map((baseMod) => (
+                <BaseModulePricingSection
+                  key={baseMod.id}
+                  baseMod={baseMod}
+                  findPlan={findPlan}
+                  editingTiers={editingTiers}
+                  canUpdate={canUpdate}
+                  isSaving={saveMutation.isPending}
+                  onStartEdit={startEditTier}
+                  onUpdateField={updateTierField}
+                  onSave={(tier) => saveTier(productId, baseMod.id, tier)}
+                  tierKey={tierKey}
                 />
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div className="grid gap-2">
-                  <Label htmlFor="edit-base">Base Price ($/mo)</Label>
-                  <Input
-                    id="edit-base"
-                    placeholder="49.00"
-                    value={editForm.basePrice}
-                    onChange={(e) => setEditForm({ ...editForm, basePrice: e.target.value })}
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="edit-per-user">Per User ($)</Label>
-                  <Input
-                    id="edit-per-user"
-                    placeholder="5.00"
-                    value={editForm.perUserPrice}
-                    onChange={(e) => setEditForm({ ...editForm, perUserPrice: e.target.value })}
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="edit-users">Included Users</Label>
-                  <Input
-                    id="edit-users"
-                    type="number"
-                    min={0}
-                    value={editForm.includedUsers}
-                    onChange={(e) => setEditForm({ ...editForm, includedUsers: parseInt(e.target.value, 10) || 0 })}
-                  />
-                </div>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="edit-features">Features (one per line)</Label>
-                <textarea
-                  id="edit-features"
-                  className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex min-h-[80px] w-full rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                  value={editForm.features}
-                  onChange={(e) => setEditForm({ ...editForm, features: e.target.value })}
-                />
-              </div>
-            </div>
-          ) : (
-            /* ── Create Form ── */
-            <div className="grid gap-4 py-2">
-              {/* Shared fields: name, tier, interval */}
-              <div className="grid grid-cols-3 gap-3">
-                <div className="grid gap-2">
-                  <Label htmlFor="create-name">Plan Name</Label>
-                  <Input
-                    id="create-name"
-                    placeholder="e.g. Starter"
-                    value={createName}
-                    onChange={(e) => setCreateName(e.target.value)}
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="create-tier">Tier</Label>
-                  <Input
-                    id="create-tier"
-                    placeholder="e.g. starter"
-                    value={createTier}
-                    onChange={(e) => setCreateTier(e.target.value)}
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label>Billing Interval</Label>
-                  <Select value={createInterval} onValueChange={setCreateInterval}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="monthly">Monthly</SelectItem>
-                      <SelectItem value="annual">Annual</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+              ))}
 
-              {/* Module selection */}
-              <div className="grid gap-2">
-                <Label>Modules &amp; Pricing</Label>
-                <div className="rounded-md border">
-                  {/* Module checkboxes */}
-                  <div className="border-b p-3 space-y-3">
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">SafeSpec</p>
-                      <div className="flex flex-wrap gap-x-4 gap-y-1">
-                        {SAFESPEC_MODULES.map((mod) => (
-                          <label key={mod.value} className="flex items-center gap-1.5 text-sm cursor-pointer">
-                            <Checkbox
-                              checked={modulePricings.some((m) => m.moduleId === mod.value)}
-                              onCheckedChange={() => toggleModule(mod.value)}
-                            />
-                            {mod.label}
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Nexum</p>
-                      <div className="flex flex-wrap gap-x-4 gap-y-1">
-                        {NEXUM_MODULES.map((mod) => (
-                          <label key={mod.value} className="flex items-center gap-1.5 text-sm cursor-pointer">
-                            <Checkbox
-                              checked={modulePricings.some((m) => m.moduleId === mod.value)}
-                              onCheckedChange={() => toggleModule(mod.value)}
-                            />
-                            {mod.label}
-                          </label>
-                        ))}
-                      </div>
+              {/* Add-ons */}
+              {config.addons.length > 0 && (
+                <>
+                  <Separator />
+                  <div>
+                    <h4 className="mb-3 text-sm font-semibold text-muted-foreground">
+                      Add-ons
+                    </h4>
+                    <div className="space-y-2">
+                      {config.addons.map((addon) => {
+                        const existingPlan = findPlan(
+                          addon.id,
+                          "standard",
+                          "monthly",
+                        );
+                        const isEditing = addon.id in editingAddons;
+                        const row = editingAddons[addon.id];
+                        const hasPrice = !!existingPlan;
+
+                        return (
+                          <div
+                            key={addon.id}
+                            className="flex items-center gap-4 rounded-md border p-3"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium">
+                                {addon.name}
+                              </p>
+                              <p className="text-xs text-muted-foreground truncate">
+                                {addon.description}
+                              </p>
+                            </div>
+
+                            {isEditing ? (
+                              <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1">
+                                  <span className="text-sm text-muted-foreground">
+                                    $
+                                  </span>
+                                  <Input
+                                    className="h-8 w-20"
+                                    placeholder="29"
+                                    value={row?.basePrice ?? ""}
+                                    onChange={(e) =>
+                                      setEditingAddons((prev) => ({
+                                        ...prev,
+                                        [addon.id]: {
+                                          basePrice: e.target.value,
+                                        },
+                                      }))
+                                    }
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter")
+                                        saveAddon(productId, addon);
+                                    }}
+                                    autoFocus
+                                  />
+                                  <span className="text-sm text-muted-foreground">
+                                    /mo
+                                  </span>
+                                </div>
+                                <Button
+                                  size="sm"
+                                  className="h-8"
+                                  disabled={
+                                    !row?.basePrice || saveMutation.isPending
+                                  }
+                                  onClick={() =>
+                                    saveAddon(productId, addon)
+                                  }
+                                >
+                                  <Save className="size-3.5" />
+                                </Button>
+                              </div>
+                            ) : hasPrice ? (
+                              <button
+                                type="button"
+                                className="flex items-center gap-1 text-sm font-medium hover:text-primary transition-colors"
+                                onClick={() =>
+                                  canUpdate &&
+                                  startEditAddon(addon.id, existingPlan)
+                                }
+                                disabled={!canUpdate}
+                              >
+                                <span>
+                                  ${parseFloat(existingPlan.basePrice).toFixed(0)}/mo
+                                </span>
+                                {existingPlan.stripePriceId && (
+                                  <Check className="size-3 text-green-600" />
+                                )}
+                              </button>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8"
+                                disabled={!canUpdate}
+                                onClick={() =>
+                                  startEditAddon(addon.id, undefined)
+                                }
+                              >
+                                Set price
+                              </Button>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
-
-                  {/* Per-module pricing table */}
-                  {modulePricings.length > 0 && (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Module</TableHead>
-                          <TableHead>Base Price ($/mo)</TableHead>
-                          <TableHead>Per User ($)</TableHead>
-                          <TableHead>Included Users</TableHead>
-                          <TableHead className="w-10" />
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {modulePricings.map((mp) => (
-                          <TableRow key={mp.moduleId}>
-                            <TableCell className="text-sm font-medium">
-                              <div className="flex items-center gap-2">
-                                <Badge variant="outline" className="text-xs">
-                                  {PRODUCT_LABELS[MODULE_PRODUCT[mp.moduleId] ?? ""] ?? ""}
-                                </Badge>
-                                {MODULE_LABELS[mp.moduleId] ?? mp.moduleId}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <Input
-                                className="h-8 w-24"
-                                placeholder="49.00"
-                                value={mp.basePrice}
-                                onChange={(e) => updateModulePricing(mp.moduleId, "basePrice", e.target.value)}
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <Input
-                                className="h-8 w-20"
-                                placeholder="5.00"
-                                value={mp.perUserPrice}
-                                onChange={(e) => updateModulePricing(mp.moduleId, "perUserPrice", e.target.value)}
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <Input
-                                className="h-8 w-16"
-                                type="number"
-                                min={0}
-                                value={mp.includedUsers}
-                                onChange={(e) => updateModulePricing(mp.moduleId, "includedUsers", parseInt(e.target.value, 10) || 0)}
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7"
-                                onClick={() => toggleModule(mp.moduleId)}
-                              >
-                                <X className="h-3.5 w-3.5 text-muted-foreground" />
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  )}
-
-                  {modulePricings.length === 0 && (
-                    <p className="p-4 text-center text-sm text-muted-foreground">
-                      Select modules above to set pricing.
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {/* Features */}
-              <div className="grid gap-2">
-                <Label htmlFor="create-features">Features (one per line, shared across all plans)</Label>
-                <textarea
-                  id="create-features"
-                  className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex min-h-[60px] w-full rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                  placeholder={"Unlimited inspections\nEmail support"}
-                  value={createFeatures}
-                  onChange={(e) => setCreateFeatures(e.target.value)}
-                />
-              </div>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={closeDialog}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={isSubmitting || !isFormValid}
-            >
-              {isSubmitting && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                </>
               )}
-              {editingPlan
-                ? "Save Changes"
-                : modulePricings.length > 1
-                  ? `Create ${modulePricings.length} Plans`
-                  : "Create Plan"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            </CardContent>
+          </Card>
+        );
+      })}
     </div>
   );
 }
 
-// ── Plan Table Sub-component ──
+// ── Base Module Pricing Section ──
 
-function PlanTable({
-  plans,
+function BaseModulePricingSection({
+  baseMod,
+  findPlan,
+  editingTiers,
   canUpdate,
-  canDelete,
-  onEdit,
-  onToggleActive,
-  onPermanentDelete,
-  isActive,
+  isSaving,
+  onStartEdit,
+  onUpdateField,
+  onSave,
+  tierKey,
 }: {
-  plans: Plan[];
+  baseMod: BaseModuleConfig;
+  findPlan: (
+    moduleId: string,
+    tier: string,
+    interval: string,
+  ) => Plan | undefined;
+  editingTiers: Record<string, TierPriceRow>;
   canUpdate: boolean;
-  canDelete: boolean;
-  onEdit: (plan: Plan) => void;
-  onToggleActive: (planId: string) => void;
-  onPermanentDelete?: (planId: string) => void;
-  isActive: boolean;
+  isSaving: boolean;
+  onStartEdit: (
+    moduleId: string,
+    tierId: string,
+    existing: Plan | undefined,
+  ) => void;
+  onUpdateField: (key: string, field: keyof TierPriceRow, value: string) => void;
+  onSave: (tier: TierConfig) => void;
+  tierKey: (moduleId: string, tierId: string) => string;
 }): React.JSX.Element {
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Name</TableHead>
-          <TableHead>Product</TableHead>
-          <TableHead>Module</TableHead>
-          <TableHead>Tier</TableHead>
-          <TableHead className="text-right">Base Price</TableHead>
-          <TableHead className="text-right">Per User</TableHead>
-          <TableHead className="text-right">Included</TableHead>
-          <TableHead>Interval</TableHead>
-          <TableHead>Stripe</TableHead>
-          <TableHead className="text-right">Actions</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {plans.map((plan) => (
-          <TableRow key={plan.id}>
-            <TableCell className="font-medium">{plan.name}</TableCell>
-            <TableCell>
-              <Badge variant="outline">
-                {PRODUCT_LABELS[plan.productId] ?? plan.productId}
-              </Badge>
-            </TableCell>
-            <TableCell className="text-sm">
-              {MODULE_LABELS[plan.moduleId] ?? plan.moduleId}
-            </TableCell>
-            <TableCell>
-              <Badge variant="secondary">{plan.tier}</Badge>
-            </TableCell>
-            <TableCell className="text-right font-mono">
-              ${plan.basePrice}
-            </TableCell>
-            <TableCell className="text-right font-mono">
-              ${plan.perUserPrice}
-            </TableCell>
-            <TableCell className="text-right">{plan.includedUsers}</TableCell>
-            <TableCell className="text-sm capitalize">
-              {plan.billingInterval}
-            </TableCell>
-            <TableCell>
-              {plan.stripePriceId ? (
-                <Badge variant="default" className="text-xs">
-                  Linked
-                </Badge>
-              ) : (
-                <Badge variant="outline" className="text-xs">
-                  Not linked
-                </Badge>
+    <div>
+      <h4 className="mb-3 text-sm font-semibold">
+        {baseMod.fullName}
+        {baseMod.required && (
+          <span className="ml-2 text-xs font-normal text-muted-foreground">
+            Always included
+          </span>
+        )}
+      </h4>
+
+      <div className="rounded-md border">
+        {/* Header */}
+        <div className="grid grid-cols-[1fr_100px_80px_80px_50px] gap-2 border-b bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground">
+          <span>Tier</span>
+          <span>Monthly price</span>
+          <span>Included users</span>
+          <span>Per extra user</span>
+          <span />
+        </div>
+
+        {/* Tier rows */}
+        {baseMod.tiers.map((tier) => {
+          const key = tierKey(baseMod.id, tier.id);
+          const existingPlan = findPlan(baseMod.id, tier.id, "monthly");
+          const isEditing = key in editingTiers;
+          const row = editingTiers[key];
+
+          return (
+            <div
+              key={tier.id}
+              className={cn(
+                "grid grid-cols-[1fr_100px_80px_80px_50px] items-center gap-2 border-b px-3 py-2.5 last:border-b-0",
+                isEditing && "bg-accent/30",
               )}
-            </TableCell>
-            <TableCell className="text-right">
-              <div className="flex items-center justify-end gap-1">
-                {canUpdate && (
+            >
+              {/* Tier name */}
+              <div>
+                <p className="text-sm font-medium">{tier.label}</p>
+                <p className="text-xs text-muted-foreground">
+                  {tier.subtitle}
+                </p>
+              </div>
+
+              {isEditing ? (
+                <>
+                  <div className="flex items-center gap-0.5">
+                    <span className="text-xs text-muted-foreground">$</span>
+                    <Input
+                      className="h-7 w-full text-sm"
+                      placeholder="49"
+                      value={row?.basePrice ?? ""}
+                      onChange={(e) =>
+                        onUpdateField(key, "basePrice", e.target.value)
+                      }
+                      autoFocus
+                    />
+                  </div>
+                  <Input
+                    className="h-7 w-full text-sm"
+                    type="number"
+                    min={0}
+                    placeholder="5"
+                    value={row?.includedUsers ?? ""}
+                    onChange={(e) =>
+                      onUpdateField(key, "includedUsers", e.target.value)
+                    }
+                  />
+                  <div className="flex items-center gap-0.5">
+                    <span className="text-xs text-muted-foreground">$</span>
+                    <Input
+                      className="h-7 w-full text-sm"
+                      placeholder="5"
+                      value={row?.perUserPrice ?? ""}
+                      onChange={(e) =>
+                        onUpdateField(key, "perUserPrice", e.target.value)
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") onSave(tier);
+                      }}
+                    />
+                  </div>
                   <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => onEdit(plan)}
-                    title="Edit plan"
+                    size="sm"
+                    className="h-7 w-full"
+                    disabled={!row?.basePrice || isSaving}
+                    onClick={() => onSave(tier)}
                   >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                )}
-                {(isActive ? canDelete : canUpdate) && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => onToggleActive(plan.id)}
-                    title={isActive ? "Deactivate plan" : "Reactivate plan"}
-                  >
-                    {isActive ? (
-                      <PowerOff className="h-4 w-4 text-destructive" />
+                    {isSaving ? (
+                      <Loader2 className="size-3 animate-spin" />
                     ) : (
-                      <Power className="h-4 w-4 text-green-600" />
+                      <Save className="size-3" />
                     )}
                   </Button>
-                )}
-                {!isActive && canDelete && onPermanentDelete && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => onPermanentDelete(plan.id)}
-                    title="Permanently delete plan"
+                </>
+              ) : existingPlan ? (
+                <>
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 text-sm text-left hover:text-primary transition-colors"
+                    onClick={() =>
+                      canUpdate &&
+                      onStartEdit(baseMod.id, tier.id, existingPlan)
+                    }
+                    disabled={!canUpdate}
                   >
-                    <Trash2 className="h-4 w-4 text-destructive" />
+                    ${parseFloat(existingPlan.basePrice).toFixed(0)}/mo
+                    {existingPlan.stripePriceId && (
+                      <Check className="size-3 text-green-600" />
+                    )}
+                  </button>
+                  <span className="text-sm text-muted-foreground">
+                    {existingPlan.includedUsers}
+                  </span>
+                  <span className="text-sm text-muted-foreground">
+                    {parseFloat(existingPlan.perUserPrice) > 0
+                      ? `$${parseFloat(existingPlan.perUserPrice).toFixed(0)}/mo`
+                      : "—"}
+                  </span>
+                  <span />
+                </>
+              ) : (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7"
+                    disabled={!canUpdate}
+                    onClick={() =>
+                      onStartEdit(baseMod.id, tier.id, undefined)
+                    }
+                  >
+                    Set price
                   </Button>
-                )}
-              </div>
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+                  <span className="text-sm text-muted-foreground">—</span>
+                  <span className="text-sm text-muted-foreground">—</span>
+                  <span />
+                </>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }

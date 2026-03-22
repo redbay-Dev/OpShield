@@ -2,6 +2,133 @@
 
 All notable changes to OpShield are documented here.
 
+## [Unreleased] — 2026-03-22: Fix Checkout, Login, Provisioning & Cross-Product Webhooks
+
+### Fixed
+
+#### Checkout Flow — Deferred Tenant Creation (Critical)
+- **Bug**: `POST /signup/checkout` created tenant, modules, and user-owner link BEFORE redirecting to Stripe for payment. If payment failed/cancelled, the tenant persisted with no subscription. Retrying gave `409: "You already own a tenant"` — permanent dead end.
+- **Fix**: Tenant creation moved into `checkout.session.completed` webhook handler. Checkout endpoint only validates, creates Stripe customer, returns URL. Tenant data passed via Stripe session metadata.
+- Orphaned `onboarding` tenants cleaned up automatically on retry.
+- Webhook handler has idempotency guard (slug uniqueness check).
+
+#### Login 2FA Redirect Loop (Critical)
+- **Bug**: `signIn.email()` with 2FA triggered `onTwoFactorRedirect` → `window.location.href = "/auth/2fa-verify"`, but login handler continued and overwrote with `window.location.href = "/admin"` → no session → redirect to login → page reload loop.
+- **Fix**: Login page checks for `twoFactorRedirect` in result and returns early. Added `sessionStorage` to preserve redirect target through 2FA flow.
+
+#### 2FA Verify Page — Cookie Race Condition
+- Changed `navigate()` to `window.location.href` for full page navigation after 2FA verification (same cookie race fix as login page).
+
+#### Admin Route — Non-Admin Redirect Loop
+- Non-admin authenticated users now redirected to `/account` instead of back to `/auth/login`.
+
+#### Provisioning — Webhook Secrets & Signature Mismatch (Critical)
+- **Bug**: Webhook secrets were empty in `.env.development` → provisioning always silently returned "Webhook not configured for product".
+- **Bug**: OpShield sent signatures as `t=<timestamp>,v1=<hmac>` but Nexum expected `sha256=<hmac>` and SafeSpec used plain HMAC. All three formats were incompatible.
+- **Fix**: Generated proper secrets, updated all three `.env.development` files, fixed Nexum's `verifyWebhookSignature()` to parse OpShield's `t=,v1=` format.
+
+#### Provisioning — Status Stuck on "dispatched" Forever
+- **Bug**: When a product responded HTTP 200, OpShield marked provisioning as "dispatched" instead of "success". No product callbacks were implemented, so status never changed.
+- **Fix**: Successful webhook delivery (200) now immediately marks provisioning as "success".
+
+#### SafeSpec — Missing `tenant.created` Webhook Handler (Critical)
+- SafeSpec's webhook handler had no `tenant.created` case. It only handled module lifecycle events.
+- Added full handler: creates local tenant record, provisions schema, creates owner user mapping. Includes idempotency check.
+- Added `opshield_tenant_id` column to SafeSpec's tenants table (schema + migration).
+- Added auto-migration runner to SafeSpec's `server.ts` startup.
+
+#### Nexum — Missing Idempotency in `tenant.created` Handler
+- Re-provisioning crashed with duplicate key on `opshield_tenant_id`. Added idempotency check.
+- Fixed schema naming convention to strip hyphens (`tenant_<hex>` not `tenant_<uuid>`), matching SafeSpec.
+
+### Changed
+
+#### Provisioning Tab — Admin Management
+- Added "Re-provision" button for stuck "dispatched" entries (was only showing retry for "failed").
+- Added "Reset" button (delete provisioning record) on every entry so admin can start fresh.
+- Shows OpShield tenant ID in header for cross-referencing with product databases.
+- Added `DELETE /tenants/:tenantId/provisioning/:productId` backend endpoint.
+
+#### dotenv Override
+- OpShield's `config.ts` now uses `override: true` for dotenv to prevent parent process env vars from masking `.env.development` values.
+
+### Cross-Product Fixes (SafeSpec + Nexum repos)
+
+#### Test Database Isolation
+- **SafeSpec**: Added `global-setup.ts` / `global-teardown.ts` using isolated `safespec_test` database. Tests no longer pollute `safespec_dev` with orphaned tenant schemas (21 were found and cleaned).
+- **Nexum**: Added `global-teardown.ts` to drop `nexum_test` after suite. Removed hardcoded DB credentials from `vitest.config.ts` and `global-setup.ts`.
+
+### Decisions
+- DEC-067: Defer tenant creation to Stripe webhook — see DECISION-LOG.md.
+
+### Known Issues / Still Missing
+- **Plans out of sync**: 34 plans in OpShield DB vs 21 in Stripe. No reconciliation tool exists.
+- **`nexum-sms` missing annual plan** — only has monthly. Blocks annual billing for tenants with SMS module.
+- **Admin dashboard fundamentally incomplete** — needs full CRUD + Stripe sync + cross-system visibility for plans, tenants, subscriptions, provisioning. This is the **#1 priority** for the next session.
+- **Login 2FA fix not yet tested live** — code is in place but needs manual verification.
+
+---
+
+## [Unreleased] — 2026-03-22: Plans System Redesign — Product-First Selection Flow
+
+### Added
+
+#### Shared Product Configuration (`PRODUCT_CONFIG`)
+- **Rich product/module metadata** in `packages/shared/src/constants/index.ts` — single source of truth for product structure, module categorisation (base vs add-on), tier definitions, dependency rules, and display metadata (names, taglines, icons).
+- **Helper functions**: `getBundleDiscountPercent()`, `getModuleDisplayName()`, `getProductForModule()` — reusable across frontend and backend.
+- **TypeScript interfaces**: `ProductConfig`, `BaseModuleConfig`, `AddonConfig`, `TierConfig`, `ProductId`.
+
+#### Shared Price Calculator (`packages/shared/src/utils/price-calculator.ts`)
+- **`calculatePriceBreakdown()`** — takes selected modules, billing interval, and plans array, returns structured breakdown with line items, subtotal, bundle discount, and total.
+- Reusable across signup flow, pricing page, and review step — eliminates duplicated price calculation logic.
+- Bundle discount logic moved to shared from backend-only `billing-utils.ts`.
+
+#### Plan Builder Components (`packages/frontend/src/components/plan-builder/`)
+- **`BillingToggle`** — Monthly/Annual tabs with "Save 2 months" badge.
+- **`ProductCard`** — Product on/off card with Switch toggle, icon, name, tagline. Expands to show modules when enabled.
+- **`TierSelector`** — Horizontal row of tier cards for base modules. Shows price, included users, per-user cost, features. Selected state with check mark.
+- **`AddonList`** — Checkbox grid of flat-rate add-on modules with prices. Disabled state with reason text for unmet dependencies.
+- **`PriceSummary`** — Live price breakdown card using shared calculator. Shows line items, subtotal, bundle discount, total.
+
+#### New "Build Your Plan" Signup Step (`/signup/plan`)
+- **Dedicated plan configuration step** — separated from company details (which is now step 3).
+- **Product-first selection**: Toggle SafeSpec and/or Nexum on/off with Switch components.
+- **Progressive disclosure**: Expand to show base modules and tiers only when product is enabled.
+- **Nexum Core auto-included**: When Nexum is toggled on, Core is automatically selected with starter tier. Cannot be removed while Nexum is active.
+- **Dependency cascading**: Toggling off SafeSpec removes nexum-compliance. Removing HVA removes Fleet Maintenance.
+- **Live price summary** updates on every selection change.
+- **5-step signup flow**: Account → Security → Company → Plan → Review (was 4 steps).
+- **Dynamic layout width**: Plan and Review steps use wider `max-w-3xl` layout for better tier card display.
+
+### Changed
+
+#### Signup Flow Restructured
+- **step-company.tsx** — Stripped down to company details only (name, slug, email). Previously contained billing interval toggle and all module selection. Now navigates to `/signup/plan`.
+- **step-review.tsx** — Uses shared `calculatePriceBreakdown()` and `PRODUCT_CONFIG` for display names. Groups line items by product. "Edit Plan" button navigates back to plan builder.
+- **signup-context.tsx** — Added `enabledProducts` Set, `toggleProduct()` with auto-selection of required modules and dependency cascade on disable, `isProductEnabled()` helper.
+- **signup-layout.tsx** — Updated from 4 to 5 step indicators. Conditional wider layout for plan/review steps.
+
+#### Public Pricing Page Redesigned (`/pricing`)
+- **Interactive calculator** replaces static card wall. Toggle products on/off, select tiers, add modules, see live pricing.
+- **Reuses plan-builder components** (ProductCard pattern, TierSelector, AddonList, PriceSummary).
+- **"Get Started" button** passes selections to signup via URL params for pre-population.
+- **Bundle & Save card** shown when no products selected to encourage exploration.
+
+#### Admin Plans Page Improved (`/admin/plans`)
+- **Grouped by product** — Plans displayed under SafeSpec and Nexum sections with product icons, not a flat table.
+- **Module subsections** — Within each product, plans grouped by module showing tier cards in a grid.
+- **Tier cards** — Compact cards showing tier name, price, included users, Stripe status, edit/deactivate actions.
+- **Monthly/Annual separation** — Plans within each module shown under monthly and annual subheadings.
+- **Inactive plans** — Shown as muted dashed-border items with reactivate/delete actions.
+- **Uses `PRODUCT_CONFIG`** for structure, labels, and ordering instead of hardcoded arrays.
+
+### Decisions
+- DEC-064: No database changes — the current plan-per-module schema works correctly for Stripe integration. The redesign is entirely UX/frontend.
+- DEC-065: Product configuration lives in shared constants as the single source of truth, not in the database. Module categorisation (base vs add-on), tier definitions, and dependency rules are structural — they don't change per-tenant.
+- DEC-066: Bundle discount logic moved to shared package so both frontend (live calculator) and backend (Stripe coupon selection) use identical rules.
+
+---
+
 ## [Unreleased] — 2026-03-22: Plan Management, Stripe Auto-Sync, Toast Notifications, Bugfixes
 
 ### Added

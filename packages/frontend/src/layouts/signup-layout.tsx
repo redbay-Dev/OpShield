@@ -7,8 +7,12 @@ const STEPS = [
   { path: "/signup", label: "Account" },
   { path: "/signup/2fa-setup", label: "Security" },
   { path: "/signup/company", label: "Company" },
+  { path: "/signup/plan", label: "Plan" },
   { path: "/signup/review", label: "Review" },
 ] as const;
+
+/** Steps that need a wider layout */
+const WIDE_STEPS = new Set(["/signup/plan", "/signup/review"]);
 
 function StepIndicator(): React.JSX.Element {
   const location = useLocation();
@@ -41,10 +45,12 @@ function StepIndicator(): React.JSX.Element {
             </span>
           </div>
           {i < STEPS.length - 1 && (
-            <div className={cn(
-              "h-px w-6 sm:w-10",
-              i < activeIndex ? "bg-primary" : "bg-border",
-            )} />
+            <div
+              className={cn(
+                "h-px w-4 sm:w-8",
+                i < activeIndex ? "bg-primary" : "bg-border",
+              )}
+            />
           )}
         </div>
       ))}
@@ -53,6 +59,9 @@ function StepIndicator(): React.JSX.Element {
 }
 
 export function SignupLayout(): React.JSX.Element {
+  const location = useLocation();
+  const isWide = WIDE_STEPS.has(location.pathname);
+
   return (
     <SignupProvider>
       <div className="flex min-h-svh flex-col bg-muted">
@@ -70,13 +79,18 @@ export function SignupLayout(): React.JSX.Element {
 
         {/* Step indicator */}
         <div className="border-b bg-background py-3">
-          <div className="mx-auto max-w-2xl px-4">
+          <div className="mx-auto max-w-3xl px-4">
             <StepIndicator />
           </div>
         </div>
 
         {/* Content */}
-        <main className="mx-auto w-full max-w-lg flex-1 px-4 py-8">
+        <main
+          className={cn(
+            "mx-auto w-full flex-1 px-4 py-8",
+            isWide ? "max-w-3xl" : "max-w-lg",
+          )}
+        >
           <Outlet />
         </main>
       </div>

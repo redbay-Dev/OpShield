@@ -17,6 +17,7 @@ import {
   fetchProvisioningStatus,
   provisionTenant,
   retryProvisioning,
+  resetProvisioning,
   suspendTenant,
   cancelTenantSubscription,
   scheduleTenantDeletion,
@@ -161,6 +162,20 @@ export function useRetryProvisioning(tenantId: string) {
   return useMutation({
     mutationFn: (data: RetryProvisioningInput) =>
       retryProvisioning(tenantId, data),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["tenants", tenantId, "provisioning"],
+      });
+    },
+  });
+}
+
+export function useResetProvisioning(tenantId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (productId: string) =>
+      resetProvisioning(tenantId, productId),
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: ["tenants", tenantId, "provisioning"],
