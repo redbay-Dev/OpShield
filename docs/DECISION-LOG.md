@@ -504,3 +504,21 @@ Every architectural, product, and workflow decision is recorded here with ration
 **Alternatives considered:** Keep shared products and add tier to the price lookup key — fragile, would still break if two tiers had identical amounts; create new prices every sync — leaves orphaned prices in Stripe that accounts team has to clean up.
 
 ---
+
+### DEC-070: SSO redirect via backend endpoint with JWT, not frontend token fetch
+**Date:** 2026-03-22
+**Context:** Products redirect to OpShield for login with `?redirect=<callback_url>`. After authentication, the user needs to be sent back to the product with a JWT. Two approaches: (A) frontend fetches JWT from `authClient.token()` then does `window.location.href = callback?token=JWT`, or (B) frontend navigates to a backend endpoint that validates the callback, generates JWT server-side, and does a 302 redirect.
+**Decision:** Backend-driven approach (B). Frontend navigates to `GET /api/auth/sso-redirect?callback=<url>`. Backend validates callback URL against allowlisted product origins, calls Better Auth's JWT plugin internally, and redirects with `?token=<JWT>`.
+**Rationale:** JWT never touches frontend JavaScript (no XSS exposure). Callback URL validation happens server-side (can't be bypassed). Single atomic operation — validate session, validate callback, issue token, redirect. No race conditions between fetching token and navigating.
+**Alternatives considered:** Frontend-driven approach — simpler but exposes JWT to frontend JS, callback validation can be bypassed by manipulating client code, and two separate network calls create race condition risk.
+
+---
+
+### DEC-071: Shared JWT audience "redbay-platform" across all products
+**Date:** 2026-03-23
+**Context:** Better Auth's JWT plugin only supports a single static `audience` claim per configuration. The spec (doc 07) envisioned per-product audiences (`"nexum"`, `"safespec"`) to prevent token reuse across services. But the JWT plugin can't issue different audiences per request.
+**Decision:** Use a single shared audience `"redbay-platform"` for all products. Configured in OpShield's Better Auth JWT plugin, validated by both Nexum and SafeSpec.
+**Rationale:** All three products are in the same trust domain (same owner, same JWKS). The JWT is only used for initial SSO handoff (not long-lived API auth) — products create their own local session cookies after validation. Token reuse risk is minimal since each product independently verifies the user's tenant membership in its own database. Per-product audiences would require either a custom JWT signing implementation or the OAuth Provider plugin (significantly more complex).
+**Alternatives considered:** Per-product audience via custom sign function — would bypass Better Auth's built-in signing and key management, high maintenance burden. OAuth Provider plugin — full OIDC flow is overkill for same-trust-domain SSO. Remove audience validation entirely — less secure, no defence-in-depth.
+
+---

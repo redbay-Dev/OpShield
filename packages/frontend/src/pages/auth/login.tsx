@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from "react";
-import { Link, useLocation } from "react-router";
+import { useState, useEffect, type FormEvent } from "react";
+import { Link, useLocation, useSearchParams } from "react-router";
 import { Loader2 } from "lucide-react";
 import { Button } from "@frontend/components/ui/button.js";
 import {
@@ -17,15 +17,70 @@ import {
 } from "@frontend/components/ui/field.js";
 import { Input } from "@frontend/components/ui/input.js";
 import { authClient } from "@frontend/lib/auth-client.js";
+import {
+  buildPostAuthUrl,
+  isExternalRedirect,
+  storeRedirectTarget,
+} from "@frontend/lib/sso-redirect.js";
 
+/**
+ * Login page.
+ *
+ * Handles two scenarios:
+ *
+ * 1. **OpShield admin login** — user navigates to /auth/login directly.
+ *    After auth, redirects to /admin (or the internal path from location.state.from).
+ *
+ * 2. **Product SSO login** — a product (Nexum/SafeSpec) redirected here with
+ *    ?redirect=<product_callback_url>. After auth, redirects through the
+ *    backend SSO endpoint which issues a JWT and sends the user back to the product.
+ *
+ * If the user is ALREADY authenticated and arrives with ?redirect=, they are
+ * redirected immediately without showing the login form (seamless SSO).
+ */
 export function LoginPage(): React.JSX.Element {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(false);
   const location = useLocation();
+  const [searchParams] = useSearchParams();
 
-  const from = (location.state as { from?: string } | null)?.from ?? "/admin";
+  // External redirect from a product (?redirect=<product_callback_url>)
+  const externalRedirect = searchParams.get("redirect");
+
+  // Internal redirect from ProtectedRoute (location.state.from)
+  const internalFrom =
+    (location.state as { from?: string } | null)?.from ?? "/admin";
+
+  // The final redirect target after authentication
+  const redirectTarget = externalRedirect ?? internalFrom;
+
+  // If user is already authenticated and there's an external product redirect,
+  // skip the login form and redirect immediately (seamless cross-product SSO).
+  useEffect(() => {
+    if (!externalRedirect) {
+      return;
+    }
+
+    setCheckingSession(true);
+
+    // Check if user already has a valid session
+    authClient
+      .getSession()
+      .then((result) => {
+        if (result.data) {
+          // User is already authenticated — redirect to product via SSO endpoint
+          window.location.href = buildPostAuthUrl(externalRedirect);
+        } else {
+          setCheckingSession(false);
+        }
+      })
+      .catch(() => {
+        setCheckingSession(false);
+      });
+  }, [externalRedirect]);
 
   async function handleSubmit(e: FormEvent): Promise<void> {
     e.preventDefault();
@@ -34,7 +89,7 @@ export function LoginPage(): React.JSX.Element {
 
     // Store redirect target so the 2FA verify page knows where to go
     // (window.location.href in onTwoFactorRedirect loses React Router state)
-    sessionStorage.setItem("auth_redirect", from);
+    storeRedirectTarget(redirectTarget);
 
     const result = await authClient.signIn.email(
       { email, password },
@@ -54,15 +109,30 @@ export function LoginPage(): React.JSX.Element {
 
     // If 2FA is required, the twoFactorClient plugin already triggered
     // onTwoFactorRedirect — don't override that navigation.
+    // The 2FA verify page will read the redirect target from sessionStorage.
     if (result.data && "twoFactorRedirect" in result.data) {
       return;
     }
 
     // Full page navigation ensures cookies are picked up by subsequent requests.
-    // React Router's navigate() can race with cookie storage, causing
-    // ProtectedRoute to see a stale (unauthenticated) session.
-    window.location.href = from;
+    // For product redirects, this goes through the backend SSO endpoint.
+    // For internal redirects, this navigates directly.
+    window.location.href = buildPostAuthUrl(redirectTarget);
   }
+
+  // Show loading state while checking for existing session (SSO passthrough)
+  if (checkingSession) {
+    return (
+      <div className="flex flex-col items-center gap-4 py-12">
+        <Loader2 className="text-muted-foreground h-8 w-8 animate-spin" />
+        <p className="text-muted-foreground text-sm">
+          Checking authentication...
+        </p>
+      </div>
+    );
+  }
+
+  const isProductLogin = isExternalRedirect(redirectTarget);
 
   return (
     <div className="flex flex-col gap-6">
@@ -70,7 +140,9 @@ export function LoginPage(): React.JSX.Element {
         <CardHeader className="text-center">
           <CardTitle className="text-xl">Welcome back</CardTitle>
           <CardDescription>
-            Sign in to your platform admin account
+            {isProductLogin
+              ? "Sign in to continue to your application"
+              : "Sign in to your platform admin account"}
           </CardDescription>
         </CardHeader>
         <CardContent>

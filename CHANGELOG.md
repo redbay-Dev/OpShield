@@ -2,6 +2,73 @@
 
 All notable changes to OpShield are documented here.
 
+## [Unreleased] — 2026-03-23: Fix SSO Redirect Flow — Products Can Now Authenticate
+
+### Added
+
+#### SSO Redirect Endpoint
+- **`GET /api/auth/sso-redirect?callback=<url>`** — validates callback URL against allowed product origins, generates a JWT via Better Auth's JWT plugin, redirects (302) to `<callback>?token=<JWT>`
+- Callback URLs validated: must be an allowed product origin, path must end with `/auth/callback`, URLs rebuilt from validated components to prevent open redirect
+
+#### App Launcher Page (`/dashboard`)
+- New landing page for authenticated non-admin users showing subscribed products with launch buttons
+- Launch buttons route through the SSO redirect endpoint for seamless product access
+- Platform admins see "Platform Admin" link, tenant owners/admins see "Account" link
+- Multi-tenant support: shows other organisations if user belongs to multiple
+- **`GET /api/v1/me/app-links`** — returns SSO launch URLs per product
+
+#### SSO Redirect Utilities (`sso-redirect.ts`)
+- Frontend helper module for building post-auth URLs, storing/retrieving redirect targets across the 2FA flow
+
+### Fixed
+
+#### SSO Redirect Flow (Critical — Was Blocking All Product Access)
+- **Bug**: OpShield login page ignored the `?redirect=<callback_url>` query parameter that products send. After login, users always went to `/admin` and could never return to Nexum or SafeSpec.
+- **Fix**: Login page reads `?redirect=` from search params, stores in sessionStorage, and after auth (including 2FA) navigates to the SSO redirect endpoint which issues a JWT and redirects to the product callback.
+- **Already-authenticated SSO**: if user arrives with `?redirect=` and has a valid session, skips login form entirely (seamless cross-product navigation per doc 07).
+
+#### JWT Audience Mismatch (Critical)
+- **Bug**: Better Auth JWT plugin defaulted audience to `baseURL` (`http://localhost:3000`). Nexum expected `"nexum"`, SafeSpec expected `"safespec"`. All tokens were rejected.
+- **Fix**: Set shared `audience: "redbay-platform"` in OpShield auth config, Nexum config/env, and SafeSpec validation (DEC-071).
+
+#### JWT Field Name Mismatch
+- **Bug**: Nexum's `TenantMembership` type expected `tenant_id` (snake_case) and `products[]`, but OpShield JWT sends `tenantId` (camelCase) and no `products` field. Auth middleware silently returned null.
+- **Fix**: Updated Nexum's `OpShieldTokenPayload` type and auth middleware to match actual JWT structure.
+
+#### Nexum Callback Redirect Loop (Critical)
+- **Root cause**: Nexum callback redirected to `/` (root), but Nexum React router has no route for `/`. The catch-all `<Route path="*">` immediately sent users to `/login`, which auto-redirected to OpShield, creating an infinite redirect loop. The cookie was set correctly but never got used.
+- **Fix**: Callback now redirects to `/dashboard` (a valid protected route inside the React app).
+
+#### Nexum Auto-Provisioning of User Mappings
+- Provisioning webhook created the tenant in Nexum but sometimes failed to create the owner `tenant_users` row. `getTenantContext` now auto-creates the mapping from JWT `tenant_memberships` data when the tenant exists locally but the user doesn't (OpShield JWT is the source of truth).
+
+### Changed
+- `GET /api/auth/authorize` (unused stub) replaced by `GET /api/auth/sso-redirect`
+- Login page shows "Sign in to continue to your application" when redirecting from a product
+- Non-admin users redirected to `/dashboard` instead of `/account` by AdminRoute
+- Default login redirect remains `/admin` (admins land on admin dashboard, non-admins get redirected to `/dashboard` by AdminRoute)
+
+### Cross-Product Fixes (Nexum + SafeSpec repos)
+- **Nexum**: Updated `.env.development` `PRODUCT_AUDIENCE=redbay-platform`, fixed `TenantMembership` type, fixed callback redirect to `/dashboard`, added user auto-provisioning in tenant middleware
+- **SafeSpec**: Updated JWT audience validation from `"safespec"` to `"redbay-platform"`
+
+### Decisions
+- DEC-070: SSO redirect via backend endpoint with JWT, not frontend token fetch
+- DEC-071: Shared JWT audience `redbay-platform` across all products
+
+### Known Issues / Still Missing
+- Nexum backend has unused `/auth/login-url` endpoint — should be cleaned up
+- SafeSpec callback cookie missing `Secure` flag for production
+- SafeSpec callback redirect may have same `/` root issue as Nexum (needs verification)
+- No error page for expired/invalid JWT tokens during product callback
+- Admin dashboard still needs: feature flags, canned responses UI, impersonation UI, data export
+- Provisioning callback — products can't report success/failure back to OpShield
+- Test coverage — Stripe webhooks, provisioning, billing calculations untested
+- Tenant suspension enforcement — flag set but products don't check it
+- Plan change workflows — no proration, no downgrade-at-period-end logic
+
+---
+
 ## [Unreleased] — 2026-03-22: Plans/Stripe Sync — Full Rewrite
 
 ### Added

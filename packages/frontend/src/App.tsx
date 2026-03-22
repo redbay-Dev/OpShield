@@ -36,6 +36,7 @@ import { AccountOverviewPage } from "@frontend/pages/account/overview.js";
 import { ProfilePage } from "@frontend/pages/account/profile.js";
 import { BillingPage } from "@frontend/pages/account/billing.js";
 import { NotificationsPage } from "@frontend/pages/account/notifications.js";
+import { AppLauncherPage } from "@frontend/pages/dashboard.js";
 
 export function App(): React.JSX.Element {
   return (
@@ -72,6 +73,11 @@ export function App(): React.JSX.Element {
           <Route path="signup/success" element={<CheckoutSuccessPage />} />
           <Route path="signup/cancelled" element={<CheckoutCancelledPage />} />
         </Route>
+      </Route>
+
+      {/* App launcher — default landing page after login */}
+      <Route element={<ProtectedRoute />}>
+        <Route path="dashboard" element={<AppLauncherPage />} />
       </Route>
 
       {/* User self-service account */}

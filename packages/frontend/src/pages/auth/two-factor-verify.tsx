@@ -12,7 +12,23 @@ import {
 import { Field, FieldGroup, FieldLabel } from "@frontend/components/ui/field.js";
 import { Input } from "@frontend/components/ui/input.js";
 import { authClient } from "@frontend/lib/auth-client.js";
+import {
+  buildPostAuthUrl,
+  peekRedirectTarget,
+} from "@frontend/lib/sso-redirect.js";
 
+/**
+ * Two-factor verification page.
+ *
+ * Shown after the user enters their email/password and 2FA is required.
+ * The redirect target is stored in sessionStorage by the login page
+ * (because window.location.href navigation loses React Router state).
+ *
+ * After successful verification:
+ * - For product SSO: navigates to /api/auth/sso-redirect?callback=<url>
+ *   which issues a JWT and redirects to the product
+ * - For internal routes: navigates directly (e.g., /admin)
+ */
 export function TwoFactorVerifyPage(): React.JSX.Element {
   const [code, setCode] = useState("");
   const [trustDevice, setTrustDevice] = useState(true);
@@ -21,10 +37,10 @@ export function TwoFactorVerifyPage(): React.JSX.Element {
   const [loading, setLoading] = useState(false);
   const location = useLocation();
 
-  // Prefer sessionStorage (set by login page before 2FA redirect),
-  // fall back to React Router state, then default to /admin
-  const from =
-    sessionStorage.getItem("auth_redirect") ??
+  // Read redirect target without clearing it (safe for React StrictMode re-renders).
+  // Prefer sessionStorage (set by login page), fall back to Router state, then /admin.
+  const redirectTarget =
+    peekRedirectTarget() ??
     (location.state as { from?: string } | null)?.from ??
     "/admin";
 
@@ -43,12 +59,13 @@ export function TwoFactorVerifyPage(): React.JSX.Element {
       return;
     }
 
+    // Clear sessionStorage now that auth is complete
     sessionStorage.removeItem("auth_redirect");
 
     // Full page navigation ensures cookies are picked up by subsequent requests.
-    // React Router's navigate() can race with cookie storage, causing
-    // ProtectedRoute to see a stale (unauthenticated) session.
-    window.location.href = from;
+    // For product redirects, this goes through the backend SSO endpoint.
+    // For internal redirects, this navigates directly.
+    window.location.href = buildPostAuthUrl(redirectTarget);
   }
 
   return (

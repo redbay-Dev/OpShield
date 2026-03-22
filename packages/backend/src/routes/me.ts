@@ -206,6 +206,26 @@ export async function meRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  // ── App Launch Links ──
+  // Returns SSO redirect URLs for each product so the frontend can
+  // build launch buttons without knowing product URLs or callback paths.
+
+  app.get(
+    "/me/app-links",
+    { preHandler: [requireAuth] },
+    async () => {
+      const links: Record<string, string> = {
+        nexum: `/api/auth/sso-redirect?callback=${encodeURIComponent(`${config.productUrls.nexum}/api/v1/auth/callback`)}`,
+        safespec: `/api/auth/sso-redirect?callback=${encodeURIComponent(`${config.productUrls.safespec}/api/v1/auth/callback`)}`,
+      };
+
+      return {
+        success: true,
+        data: links,
+      };
+    },
+  );
+
   // ── My Tenants ──
 
   app.get(

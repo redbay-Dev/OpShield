@@ -16,8 +16,8 @@ export function AdminRoute(): React.JSX.Element {
   }
 
   if (!adminStatus?.isPlatformAdmin) {
-    // Authenticated but not admin — send to account page, not login
-    return <Navigate to="/account" replace />;
+    // Authenticated but not admin — send to app launcher
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <Outlet />;

@@ -79,6 +79,7 @@ export const auth = betterAuth({
     jwt({
       jwt: {
         issuer: "opshield",
+        audience: "redbay-platform",
         expirationTime: "1h",
         definePayload: async ({ user }) => {
           const memberships = await db
