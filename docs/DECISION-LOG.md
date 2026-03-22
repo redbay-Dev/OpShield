@@ -489,4 +489,11 @@ Every architectural, product, and workflow decision is recorded here with ration
 **Rationale:** Tenant records should only exist after confirmed payment. Stripe metadata has a 500-char limit per value, but JSON-encoded module selections fit comfortably. The webhook handler includes idempotency guards for duplicate deliveries.
 **Alternatives considered:** Wrapping checkout in a DB transaction with rollback on Stripe failure — rejected because the user would still be stuck if they cancelled on Stripe's hosted checkout page.
 
+### DEC-068: Reconciliation as admin API, not background job
+**Date:** 2026-03-22
+**Context:** 34 plans existed in OpShield DB but only 21 in Stripe. Plans created via migration/API didn't always successfully sync to Stripe, and there was no way to detect or fix drift. A reconciliation mechanism was needed.
+**Decision:** Built reconciliation as on-demand admin API endpoints (`GET /plans/admin/reconciliation`, `POST /plans/admin/sync-all`, `POST /plans/:planId/sync`, `POST /plans/admin/create-annual-variants`) with a dedicated admin UI tab. Not a background cron job.
+**Rationale:** Reconciliation needs human review before action — automatically syncing could create duplicate Stripe prices or overwrite manual Stripe changes. On-demand gives the admin control and visibility. The UI shows exactly what's wrong (missing prices, mismatches, orphans) so the admin can decide what to fix.
+**Alternatives considered:** Background job that auto-syncs on a schedule — rejected because blind sync could create pricing chaos; Stripe CLI script — rejected because it's outside the dashboard (violates "everything through UI" rule).
+
 ---

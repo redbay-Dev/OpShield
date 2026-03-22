@@ -2,6 +2,45 @@
 
 All notable changes to OpShield are documented here.
 
+## [Unreleased] — 2026-03-22: Plans/Stripe Bidirectional Reconciliation & Admin Controls
+
+### Added
+
+#### Plans/Stripe Reconciliation API (6 new endpoints)
+- **`GET /plans/admin/reconciliation`** — Compares all DB plans against Stripe products/prices. Returns categorised results: synced, missing Stripe price, missing per-user price, price mismatches, missing annual variants, orphaned Stripe prices, and inactive plans. Summary stats included.
+- **`POST /plans/:planId/sync`** — Force sync a single plan to Stripe. Clears stale Stripe IDs first, then creates fresh Stripe products/prices. Audit-logged.
+- **`POST /plans/admin/sync-all`** — Bulk sync all active plans. **Validates every plan's Stripe price actually exists** before skipping — if a Stripe price was deleted/archived, the plan gets re-synced. Audit-logged.
+- **`POST /plans/admin/create-annual-variants`** — Auto-generates annual plans for monthly plans that lack them (annual = monthly x 10, i.e. 2 months free). Auto-syncs to Stripe. Audit-logged.
+- **`POST /plans/admin/clear-stale-stripe-ids`** — Scans all plans, validates each `stripePriceId` and `stripePerUserPriceId` against live Stripe data, clears any that point to deleted/archived Stripe prices. Audit-logged.
+- **`DELETE /plans/admin/bulk`** — Bulk delete plans by ID array. Supports permanent hard delete (if no subscriptions reference the plan) or soft deactivation. Audit-logged.
+
+#### Admin Stripe Sync Dashboard
+- **New "Stripe Sync" tab** on admin Pricing page with full reconciliation dashboard.
+- **Summary cards**: DB plans (active/inactive), synced count (verified against Stripe), Stripe prices (with orphan count), total issues.
+- **Actions card** with clear descriptions: Refresh, Sync All to Stripe, Clear Stale Stripe IDs, Create Annual Variants.
+- **Issue sections** (collapsible): Missing Stripe prices (with stale ref indicator), missing per-user prices, price mismatches (DB vs Stripe cents), missing annual variants, orphaned Stripe prices, inactive plans.
+- **Per-plan actions**: Sync button + delete button (trash icon) on every plan row.
+- **Bulk delete**: "Delete All Inactive" button for cleaning up deactivated plans.
+- **Error handling**: Stripe not configured shows clear error, individual sync failures shown per-plan.
+
+### Fixed
+- **Sync-all no longer falsely skips plans**: Previously checked only if `stripePriceId` was set, not whether the referenced Stripe price still existed. Now validates against live Stripe data.
+- **Single plan sync is now a force sync**: Clears stale Stripe IDs before re-syncing, so deleted Stripe prices don't block re-creation.
+- **Pre-existing lint error** in `migration-state.ts` (unused `sql` import) fixed.
+
+### Decisions
+- DEC-068: Reconciliation as admin API, not background job — see DECISION-LOG.md.
+
+### Known Issues / Still Missing
+- **Orphaned Stripe prices** — reconciliation identifies them but cannot archive them from the UI (must be done in Stripe dashboard).
+- **Admin dashboard still needs**: feature flags, canned responses UI, impersonation UI, data export.
+- **Provisioning callback** — products still can't report provisioning success/failure back to OpShield.
+- **Test coverage** — Stripe webhook handlers, provisioning workflows, and billing calculations remain untested.
+- **Tenant suspension enforcement** — flag is set but products don't check it.
+- **Plan change workflows** — no proration for mid-cycle upgrades, no downgrade-at-period-end logic.
+
+---
+
 ## [Unreleased] — 2026-03-22: Fix Checkout, Login, Provisioning & Cross-Product Webhooks
 
 ### Fixed

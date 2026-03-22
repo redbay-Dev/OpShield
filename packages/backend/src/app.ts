@@ -36,6 +36,7 @@ import { inboundEmailRoutes } from "./routes/inbound-email.js";
 import { planRoutes } from "./routes/plans.js";
 import { adminManagementRoutes } from "./routes/admin-management.js";
 import { tenantUserRoutes } from "./routes/tenant-users.js";
+import { migrationStateRoutes } from "./routes/migration-state.js";
 
 const TRUSTED_ORIGINS = new Set([
   config.auth.url,
@@ -269,6 +270,7 @@ export function buildApp(): ReturnType<typeof Fastify> {
       void api.register(planRoutes);
       void api.register(adminManagementRoutes);
       void api.register(tenantUserRoutes);
+      void api.register(migrationStateRoutes);
     },
     { prefix: "/api/v1" },
   );

@@ -5,3 +5,4 @@ export * from "./billing.js";
 export * from "./notification-preferences.js";
 export * from "./impersonation.js";
 export * from "./support.js";
+export * from "./migration-state.js";

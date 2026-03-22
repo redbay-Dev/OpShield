@@ -17,6 +17,7 @@ import { TenantDetailPage } from "@frontend/pages/admin/tenants/tenant-detail.js
 import { WebhookLogPage } from "@frontend/pages/admin/webhook-log.js";
 import { AuditLogPage } from "@frontend/pages/admin/audit-log.js";
 import { SystemHealthPage } from "@frontend/pages/admin/system-health.js";
+import { MigrationsPage } from "@frontend/pages/admin/migrations.js";
 import { RevenuePage } from "@frontend/pages/admin/revenue.js";
 import { SupportTicketsPage } from "@frontend/pages/admin/support-tickets.js";
 import { SupportTicketDetailPage } from "@frontend/pages/admin/support-ticket-detail.js";
@@ -104,6 +105,10 @@ export function App(): React.JSX.Element {
             <Route
               path="admin/system-health"
               element={<SystemHealthPage />}
+            />
+            <Route
+              path="admin/migrations"
+              element={<MigrationsPage />}
             />
             <Route path="admin/revenue" element={<RevenuePage />} />
             <Route path="admin/support" element={<SupportTicketsPage />} />
